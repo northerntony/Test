@@ -1,0 +1,27 @@
+<package>
+	<active-rules>0000ALLMCAF092</active-rules>
+	<ruleset name="0000ALLMCAF092">
+		<globals>globals.xml</globals>
+		<rules>rules.drl</rules>
+		<excelfiles>
+			<excelfile>
+				<excelfilename>AF_MIN_PREM</excelfilename>
+				<path>AF_MIN_PREM.xlsx</path>
+			</excelfile>
+			<excelfile>
+				<excelfilename>EUROPA_COMM_MC</excelfilename>
+				<path>EUROPA_COMM_MC.xls</path>
+			</excelfile>
+			<excelfile>
+				<excelfilename>EUROPA_FORD_IPT</excelfilename>
+				<path>EUROPA_FORD_IPT.xls</path>
+			</excelfile>
+		</excelfiles>
+		<csvfiles>
+			<csvfile>
+				<csvfilename>aplanBranches</csvfilename>
+				<path>aplanBranches.csv</path>
+			</csvfile>
+		</csvfiles>
+	</ruleset>
+</package>

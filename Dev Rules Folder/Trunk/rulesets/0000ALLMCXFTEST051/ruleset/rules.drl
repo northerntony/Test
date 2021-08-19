@@ -1,0 +1,1037 @@
+/* 
+Creation Date:  08th September 2008
+Author: 		Tony Bailey
+Requirements:	AVIVA Bike Commission defaulted to £56 in back office.
+				Various levels of commission based on bike group and cover. 
+History
+Date		Version	Author	Description of Change
+19/01/11	023		TB		JOB 5172 Increase GOLD commissions.	
+11/03/11	024		TB		JOB 5609 Setting DIAMOND renewals commission.
+11/04/11	025		TB		JOB 5856 GOLD & DIAMOND renewals commissions.	
+18/04/11	026		TB		JOB 5900 Correction to include SILV affinity.
+09/05/11	027		TB		JOB 6023 Aviva RTP discounts.
+10/05/11	028		TB		JOB 6042 New rule for Aviva XF scheme. Also, remove 5% loading rule for ages 30 to 59 year olds.			
+11/05/11	029		TB		JOB 6051 Correct the commission change for the bike insurer to not apply for GOLD & DIAM affinities.
+13/05/11	030		TB		JOB 6081 Increase Aviva bike group discounts.
+16/05/11	031		TB		JOB 6068 Reduce Gold Commissions by £10.00.
+19/05/11	032		TB		JOB 6116 Further RTP reductions for Aviva XF.
+24/05/11	033		TB		JOB 6151 Reduce XF minimum premiums.
+05/08/11	034		TB		JOB 6743 Aviva XF group 16 and 17 motorcycle to decline.
+11/08/11	035		TB		JOB 6789 Increase commission for Silver Gold and Diamond in the U branch.
+15/08/11	036		TB		JOB 6346 Move commission for Silver Gold Diamond to add-on and amend commissions.
+24/08/11	037		TB		JOB 6930 Allow £25 discount for source CC11.
+05/09/11	038		TB		JOB 6877 Price out Channel Isles postcodes.
+06/09/11	039		TB		JOB 6862 Remove rule put in for Job 6743.
+15/09/11	040		TB		JOB 7109 Update DIAM GOLD & SILV RPT commission changes to inc excel spreadsheet.
+02/11/11	041		TB		JOB 6413 Discount for BLD staff (L & U branches).
+14/11/11	042		TB		JOB 7662 Changes to Aviva RTP Discounts and minimum premiums.
+14/02/12	043		TB		JOB 8457 Aviva XF scheme reduced RTP test.
+22/02/12	044		TB		JOB 8547 Remove Aviva XF scheme reduced RTP test rules.
+28/02/12	045		TB		JOB 8578 Reinstate Aviva XF scheme reduced RTP test.
+14/03/12	046		TB		JOB 8768 Aviva RTP discounts.
+26/04/12	047		TB		JOB 9222 Aviva RTP - Auth Code.
+11/06/12	048		TB		JOB 9309 Pricing changes for Bike NTU & lapsed email campaigns. Also, tidied up code.
+03/08/12	049		TB		JOB 10294 Correct RTP code to decline risks on Motorcycle and decline for dual postcodes. 
+14/08/12	050		TB		JOB 10395 Correct RTP code to decline for dual postcodes.
+24/10/12	051		TB		MOVE COMMISSION IN TO FEES.
+*/
+package uk.co.cdl.rtpm.models;
+
+import uk.co.cdl.rtpm.models.mc.Risk;
+import uk.co.cdl.rtpm.models.mc.Result;
+import uk.co.cdl.rtpm.models.mc.Bike;
+import java.util.ArrayList;
+import org.joda.time.ReadableInstant;
+import org.joda.time.Days;
+import org.joda.time.DateTime;
+import uk.co.cdl.rtpm.models.mc.Rider;
+global org.apache.log4j.Logger logger;
+//TB14022012 JOB 8457
+import uk.co.cdl.rtpm.models.mc.Proposer;
+
+//declare any global variables here
+global java.util.Set schemes;
+global java.util.Set affinityCode;
+global java.util.Set ridersureAffinityCode;
+global java.util.Set deluxeAffinity;
+global java.util.HashMap nuPremCompCommissions;
+global java.util.HashMap nuPremTPFTCommissions;
+global java.util.HashMap nuPremTPOCommissions;
+global java.util.HashMap minEnhancedDiscPremium;
+//TB09052011 JOB 6023
+global java.util.HashMap compGroupDiscount;
+global java.util.HashMap tpftGroupDiscount;
+global java.lang.Boolean DEBUG;
+//TB15092011 JOB 7109 Update DIAM GOLD & SILV RPT commission changes to inc excel spreadsheet.
+global uk.co.cdl.rtpm.models.excel.ExcelFile EUROPA_COMM_MC;
+global java.util.Set spreadsheetAffinity;
+//TB02112011 JOB 6413
+global java.util.Set bldAffinityCode;
+
+rule "Setup"
+salience 1500
+when
+	$results : ResultList()
+then 
+	$results.sortByAlgPremium();
+	for(BaseResult result : $results) 
+		{	update(result);	}		
+end
+
+//TB24052011 JOB 6151 Reduce XF minimum premiums.
+//TB14112011 JOB 7662 Changes to Aviva RTP Discounts and minimum premiums. Was comp 7000 and non comp 6000.
+//TB26042012 JOB 9222 Aviva RTP - Auth Code.
+rule "enhanced NCB discount"
+salience 1400
+activation-group "enhanced NCB discount"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	Risk( $bikeNCB :yearsNCB)
+	$COMP : ArrayList() from collect (Bike(cover == "C"))
+	$TPFT : ArrayList()	from collect (Bike(cover == "F"))
+then
+	int minPremium;
+	int discount = 0;
+	int totPremium = $result.getAlgPremium();
+	
+	if($COMP.size() > 0)
+		{	minPremium = (Integer)minEnhancedDiscPremium.get("C");	}
+	else
+		{
+			if($TPFT.size() > 0)
+				{	minPremium = (Integer)minEnhancedDiscPremium.get("F");	}
+			else
+				{	minPremium = (Integer)minEnhancedDiscPremium.get("T");	}
+		}
+	
+	if($bikeNCB == 2)
+		{	discount = (totPremium * 8) /100;	}
+	else if ($bikeNCB == 3)
+		{	discount = (totPremium * 8) /100;	}
+	else if ($bikeNCB >= 4)
+		{	discount = (totPremium * 11) /100;	}
+	
+	if ((totPremium - discount) < minPremium)
+		{	discount = totPremium - minPremium;	}
+	
+	if (discount > 0)
+		{
+			InsurerDiscount insDis = new InsurerDiscount();
+			insDis.setValue(discount);
+			insDis.setRef("PRM366643Q");
+			$result.setInsurerDiscount(insDis);
+			logger.info("Scheme ["+$result.getSchemeCode()+"] Enhanced NCB discount of  #"+ discount);
+			$result.setRulesetChanged(true);
+    	}
+end
+
+//TB09052011 JOB 6023 Aviva RTP discounts.
+//TB13052011 JOB 6081 Increase Aviva bike group discounts.
+//TB19052011 JOB 6116 Further RTP reductions for Aviva XF.
+//TB24052011 JOB 6151 Reduce XF minimum premiums.
+//TB14112011 JOB 7662 Changes to Aviva RTP Discounts and minimum premiums. Was comp 7000 and non comp 6000.
+//TB14042012 JOB 8457 Aviva XF scheme reduced RTP test.
+//TB22022012 JOB 8547 Remove Aviva XF scheme reduced RTP test rules.
+//TB28022012 JOB 8578 Reinstate Aviva XF scheme reduced RTP test.
+//TB14032011 JOB 8768 Aviva RTP discounts.
+//TB26042012 JOB 9222 Aviva RTP - Auth Code.
+rule "apply bike grouping discounts"
+salience 1300
+activation-group "apply bike grouping discounts"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	$COMP : ArrayList() from collect (Bike(cover == "C"))
+	$TPFT : ArrayList()	from collect (Bike(cover == "F"))
+	$TPO  : ArrayList() from collect (Bike(cover == "T"))
+then
+	//Declare variables
+	float discount = 1;	
+	int currentAlg = $result.getAlgPremium() - $result.getInsurerDiscount().getValue() + $result.getInsurerLoad().getValue();
+	int discountAmount = 0;	
+	int highBike = 0;
+	int mcGroupValue = 0;
+	int minimumPrem = 8000;
+	int newAlg = 0;
+	Number DnewAlg = 0.0;
+		
+	//Establish the highest rated motorcycle group	
+	for(Integer $group : $result.getGroups())
+		{
+			if($group > highBike)
+				{	highBike = $group;
+					mcGroupValue = highBike;
+				}
+		}
+			
+	if (mcGroupValue < 9)
+		{	mcGroupValue = 8;	}
+	else if (mcGroupValue > 17)
+		{ mcGroupValue = 18;	}
+	
+	//Extract discount from globals
+	if($COMP.size() > 0)
+		{	discount = (Float)compGroupDiscount.get(mcGroupValue);	}	
+	else if ($TPFT.size() > 0)
+		{	discount = (Float)tpftGroupDiscount.get(mcGroupValue);
+			minimumPrem = 7000;	}
+	
+	//Calculate discount applicable, compare with minimum premium and apply if necessary
+	if (discount != 1.0 && $TPO.size() < 1)
+		{
+			//Calculate the discount to be applied including the overall flat adjuster value	 
+			DnewAlg =  (currentAlg * (Float)discount) ;
+		    newAlg = DnewAlg.intValue();
+
+		    if (newAlg < minimumPrem)	
+		    	{ newAlg = minimumPrem;	}
+		    
+		    if (newAlg < $result.getAlgPremium())
+		    	{
+		    		discountAmount = $result.getAlgPremium() - newAlg;
+		    		InsurerDiscount insDis = new InsurerDiscount();
+					insDis.setValue(discountAmount);
+					insDis.setRef("PRM366643Q");
+					$result.setInsurerDiscount(insDis);
+					logger.info("Bike group discount allowed. Total discount increased to #" + discountAmount);
+					$result.setRulesetChanged(true); 
+				}
+		 }
+	else
+		{	logger.info ("No bike group discount");	}	
+end
+
+//TB10052011 JOB 6042 New rule for Aviva XF scheme. Also, remove 5% loading rule for ages 30 to 59 year olds.
+//TB24052011 JOB 6151 Reduce XF minimum premiums.
+//TB14112011 JOB 7662 Changes to Aviva RTP Discounts and minimum premiums. Was comp 7000 and non comp 6000.
+//TB26042012 JOB 9222 Aviva RTP - Auth Code.
+rule "apply further discount based on bike group and mileage"
+salience 1200
+activation-group "apply further discount based on bike group and mileage"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	Bike( $mileage : annualMileage)
+	$COMP : ArrayList() from collect (Bike(cover == "C"))
+	$TPFT : ArrayList()	from collect (Bike(cover == "F"))
+	$TPO  : ArrayList() from collect (Bike(cover == "T"))
+then
+	//Declare variables
+	int disc = 75;  
+	int discountTotal = 0;
+	int highestBike = 0;
+	int minPrem = 0;
+	int presentAlg = $result.getAlgPremium() - $result.getInsurerDiscount().getValue() + $result.getInsurerLoad().getValue();
+	int revisedAlg  = 0;
+	
+	//Establish the highest rated motorcycle group	
+	for(Integer $group : $result.getGroups())
+		{
+			if($group > highestBike)
+				{	highestBike = $group;	}
+		}
+		
+	//Set minimum premiums
+	if($COMP.size() > 0)
+		{	minPrem = 7500;	}
+	else if($TPFT.size() > 0)
+		{	minPrem = 7000;	}
+	else if($TPO.size() > 0)
+		{	minPrem = 7000;	}
+
+	//Calc discount and compare with minimum premiums
+	revisedAlg  = presentAlg - (presentAlg * disc)/ 1000;
+			
+	if (revisedAlg < minPrem)
+		{	revisedAlg = minPrem;	}
+			
+	discountTotal = $result.getAlgPremium() - revisedAlg;
+			
+	//Allow discount
+	if(highestBike > 5 && $mileage < 2500 & discountTotal > 0)
+		{
+			InsurerDiscount insDis = new InsurerDiscount();
+			insDis.setValue(discountTotal);
+			insDis.setRef("PRM366643Q");
+			$result.setInsurerDiscount(insDis);
+			$result.setRulesetChanged(true);
+			logger.info("Grp 6 plus and less then 2500 miles. Total discount now is #" + discountTotal);
+		}		
+end
+
+//TB14112011 JOB 7662 Changes to Aviva RTP Discounts and minimum premiums. Was comp 7000 and non comp 6000.
+//TB14042012 JOB 8457 Aviva XF scheme reduced RTP test.
+//TB22022012 JOB 8547 Remove Aviva XF scheme reduced RTP test rules.
+//TB28022012 JOB 8578 Reinstate Aviva XF scheme reduced RTP test.
+//TB14032011 JOB 8768 Aviva RTP discounts.
+//TB26042012 JOB 9222 Aviva RTP - Auth Code.
+rule "allow further discount for tpft"
+salience 1100
+activation-group "allow further discount for tpft"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	Bike (cover == "F")
+then
+	//Declare variables
+	int minimumTpftPremium = 7000;
+	int currentPostAlg = $result.getAlgPremium() - $result.getInsurerDiscount().getValue() + $result.getInsurerLoad().getValue();
+	int algAfterDiscount = currentPostAlg - ((currentPostAlg * 5) / 100);
+	int discountValue = 0;
+
+	if (algAfterDiscount < minimumTpftPremium)
+		{	discountValue = $result.getAlgPremium() - minimumTpftPremium;	}
+	else 
+	{	discountValue = $result.getAlgPremium() - algAfterDiscount;	}
+				
+	//Allow discount
+	if(discountValue > 0 )
+		{
+			InsurerDiscount insDis = new InsurerDiscount();
+			insDis.setValue(discountValue);
+			insDis.setRef("PRM366643Q");
+			$result.setInsurerDiscount(insDis);
+			$result.setRulesetChanged(true);
+			logger.info("5% TPFT discount allowed. Total discount now allowed is #" + discountValue);
+		}
+end
+
+//TB05092011 JOB 6877 Price out Channel Island postcodes.
+//TB03082012 JOB 10294 Correct RTP code to decline risks on Motorcycle and decline for dual postcodes.
+rule "decline jersey and guernsey postcodes"
+salience 1000
+activation-group "decline jersey and guernsey postcodes"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	$baseR : BaseRisk()
+then
+	String postCodeBeginning = $baseR.getPostCode().substring(0,2);		
+	
+	if (postCodeBeginning.equals("JE") || postCodeBeginning.equals("GY"))
+		{
+			InsurerDiscount insDis = new InsurerDiscount();
+			insDis.setValue(000);
+			$result.setInsurerDiscount(insDis);				
+			InsurerLoad insLoad = new InsurerLoad();
+			insLoad.setValue(2500000);
+			$result.setInsurerLoad(insLoad);			
+			$result.setRulesetChanged(true);
+			logger.info ("JE or GY postcode. Load applied of [25000.00");
+		}
+end
+
+//TB03082012 JOB 10294 Correct RTP code to decline risks on Motorcycle and decline for dual postcodes.
+//TB14082012 JOB 10395 Correct RTP code to decline for dual postcodes.
+rule "increase alg for differing postcodes"
+salience 900
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	$base: BaseRisk()
+	Bike ($keptPostcode : keptPostCode)
+then
+	String $riskPostcode = $base.getPostCode().trim().toUpperCase();
+	
+	if ($keptPostcode != null && (!$keptPostcode.equals($riskPostcode)))
+		{
+			InsurerDiscount insDis = new InsurerDiscount();
+			insDis.setValue(000);
+			$result.setInsurerDiscount(insDis);				
+			InsurerLoad insLoad = new InsurerLoad();
+			insLoad.setValue(2500000);
+			$result.setInsurerLoad(insLoad);			
+			$result.setRulesetChanged(true);
+			logger.info ("Kept postcode differs from risk postcode. Load applied of [25000.00");
+		}
+end
+
+//Commission for Ridersure etc affinities should be 20% and this conflicts with values set up in P97Q and P89 if an
+//underwriting discount is also being applied. As a result the values in P97Q and P89 have to be removed (see
+//Andy Weaver for clarification) and the code below should work out the correct 20% commission after the uw
+//discount has been applied.
+rule "Apply Ridersure etc commissions"
+salience 800
+activation-group "Apply Ridersure etc commissions"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	$applicableAffinities : BaseRisk(eval(ridersureAffinityCode.contains(affinity)))
+then
+	int disAmount, newTotPremium = $result.getAlgPremium() - $result.getInsurerDiscount().getValue();
+
+	disAmount = (newTotPremium * 25) /100;
+	if(DEBUG)
+		{
+			logger.info("AVIVA Percentage DEBUG: Disamount: " + disAmount);
+		}
+	logger.info("AVIVA percentage ["+$result.getSchemeCode()+"] Set commission to #"+ disAmount);
+    $result.setBrokerAdjustment(disAmount);
+    $result.setRulesetChanged(true);   
+end	
+
+/*
+rule "set fee amount to same value as commission"
+salience 750
+activation-group "set fee amount to same value as commission"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	$applicableAffinities : BaseRisk(eval(affinityCode.contains(affinity)))
+	Policy($idate : inceptionDate, $rtpType : rtpType)
+then
+	DateTime $effDate = new DateTime(2012,11,01,00,01,00,00);
+	DateTime $today = new DateTime();
+	int currentCommissionValue = $result.getBrokerAdjustment();
+	int $inceptionDateDiff = (Days.daysBetween((ReadableInstant)$effDate,(ReadableInstant)$idate).getDays());
+	int $quoteDateDiff = (Days.daysBetween((ReadableInstant)$effDate,(ReadableInstant)$today).getDays());	
+	
+	logger.info ("inceptionDateDiff is " + $inceptionDateDiff);
+	logger.info ("$rtpType is " + $rtpType);
+	logger.info ("$today is " + $today);
+	logger.info ("quoteDatediff is " + $quoteDateDiff);
+	logger.info ("currently commission is set at " + $result.getBrokerAdjustment());
+	
+	
+	if ( ($rtpType == RTPType.N && $quoteDateDiff >= 0) || ($rtpType != RTPType.N && $inceptionDateDiff >= 0) )	
+		{		
+			logger.info ("NB quoted 01Nov2012 onwards or Rnwl/AQ with incep date of 1stNov or later");
+			//Set fee
+			logger.info("Fee updated to match existing commission value");
+			$result.setBrokerAdjustment(001);
+			$result.setFee(currentCommissionValue);
+			$result.setRulesetChanged(true);
+		}
+end
+*/
+
+rule "Apply Comp commissions"
+salience 700
+activation-group "Apply Comp commissions"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	$bike : Bike(cover == "C")
+	$applicableAffinities : BaseRisk(eval(affinityCode.contains(affinity)))
+then
+	boolean compCommGroupFound = true;
+	double excelCompComm = 0.0;
+	int compCommAdjustment = 0;
+	int disAmount = 0;
+	int highBike = 0;
+	String $compScheme = "SCHEME" + $result.getSchemeCode().trim();	
+		
+	for(Integer $group : $result.getGroups())
+		{
+			if($group > highBike)
+				highBike = $group;
+		}
+	
+	//Check of affinity code exists within the spreadsheet
+	
+	String $compGroup = "GP" + highBike;
+	
+	logger.info ("$compGroup is " + $compGroup);
+    try
+	    {
+		 	Object c = EUROPA_COMM_MC.getValue( "1.1_RTP_Step_Comp_comm", "Scheme Code", String.class, "Scheme Code", $compScheme.toUpperCase());
+		 	
+		 	if(c.toString().equals("0.0"))
+		 		{ 
+			 		logger.info ("object c is 0.0. No commission change.");
+			 		compCommGroupFound = false;	
+			 	}
+	    }
+	catch (NullPointerException e)
+	    {
+		    logger.info ("Group not found. No commission change.");
+		    compCommGroupFound = false;
+	    }
+		
+	logger.info ("compCommGroupFound is " + compCommGroupFound);
+			
+	if (compCommGroupFound)
+		{	excelCompComm = EUROPA_COMM_MC.getValue("1.1_RTP_Step_Comp_comm", "Commission", double.class, "Scheme Code", $compScheme.toUpperCase(), "Group", $compGroup);	}
+	
+	logger.info ("excelCompComm is " + excelCompComm);
+	
+	//Set commission to value extract from spreadsheet
+	Number DcompCommAmount = 0.0;
+	int compCommAmount = 0;
+	DcompCommAmount = ((double)excelCompComm);
+	compCommAmount = DcompCommAmount.intValue();
+	
+	if (compCommAmount > 0)
+		{
+			compCommAdjustment += compCommAmount;
+			logger.info("AVIVA Comprehensive has revised fee of #" + compCommAdjustment);
+			$result.setBrokerAdjustment(010);
+			$result.setFee(compCommAdjustment);
+			$result.setRulesetChanged(true);		
+		}
+end
+
+
+rule "Apply TPFT commissions"
+salience 600
+activation-group "Apply TPFT commissions"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	$bike : Bike(cover == "F")
+	$applicableAffinities : BaseRisk(eval(affinityCode.contains(affinity)))
+then
+	boolean tpftCommGroupFound = true;
+	double excelTpftComm = 0.0;
+	int disAmount = 0;
+	int highBike = 0;
+	int tpftCommAdjustment = 0;
+	String $tpftScheme = "SCHEME" + $result.getSchemeCode().trim();	
+	
+	for(Integer $group : $result.getGroups())
+		{
+			if($group > highBike)
+				highBike = $group;
+		}
+
+	String $tpftGroup = "GP" + highBike;
+	
+	logger.info ("$tpftGroup is " + $tpftGroup);
+	
+	//Check of affinity code exists within the spreadsheet
+    try
+	    {
+		 	Object f = EUROPA_COMM_MC.getValue( "1.1_RTP_Step_Tpft_comm", "Scheme Code", String.class, "Scheme Code", $tpftScheme.toUpperCase());
+		 	
+		 	if(f.toString().equals("0.0"))
+		 		{ 
+			 		logger.info ("object f is 0.0. No commission change.");
+			 		tpftCommGroupFound = false;	
+			 	}
+	    }
+	catch (NullPointerException e)
+	    {
+		    logger.info ("Group not found. No commission change.");
+		    tpftCommGroupFound = false;
+	    }
+		
+	logger.info ("tpftCommGroupFound is " + tpftCommGroupFound);
+			
+	if (tpftCommGroupFound)
+		{	excelTpftComm = EUROPA_COMM_MC.getValue("1.1_RTP_Step_Tpft_comm", "Commission", double.class, "Scheme Code", $tpftScheme.toUpperCase(), "Group", $tpftGroup);	}
+	
+	logger.info ("excelTpftComm is " + excelTpftComm);
+	
+	//Set commission to value extract from spreadsheet
+	Number DtpftCommAmount = 0.0;
+	int tpftCommAmount = 0;
+	DtpftCommAmount = ((double)excelTpftComm);
+	tpftCommAmount = DtpftCommAmount.intValue();
+	
+	if (tpftCommAmount > 0)
+		{
+			tpftCommAdjustment += tpftCommAmount;
+			logger.info("AVIVA TPFT has revised fee of #" + tpftCommAdjustment);
+			$result.setBrokerAdjustment(010);
+			$result.setFee(tpftCommAdjustment);
+			$result.setRulesetChanged(true);		
+		} 
+end
+
+rule "Apply TPO commissions"
+salience 500
+activation-group "Apply TPO commissions"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	$bike : Bike(cover == "T")
+	$applicableAffinities : BaseRisk(eval(affinityCode.contains(affinity)))
+then
+	boolean tpoCommGroupFound = true;
+	double excelTpoComm = 0.0;
+	int disAmount = 0;
+	int highBike = 0;
+	int tpoCommAdjustment = 0;
+	String $tpoScheme = "SCHEME" + $result.getSchemeCode().trim();	
+	
+	for(Integer $group : $result.getGroups())
+		{
+			if($group > highBike)
+				highBike = $group;
+		}
+	
+	String $tpoGroup = "GP" + highBike;
+	
+	logger.info ("$tpoGroup is " + $tpoGroup);
+    
+    //Check of affinity code exists within the spreadsheet
+    try
+	    {
+		 	Object t = EUROPA_COMM_MC.getValue( "1.1_RTP_Step_Tpo_comm", "Scheme Code", String.class, "Scheme Code", $tpoScheme.toUpperCase());
+		 	
+		 	if(t.toString().equals("0.0"))
+		 		{ 
+			 		logger.info ("object t is 0.0. No commission change.");
+			 		tpoCommGroupFound = false;	
+			 	}
+	    }
+	catch (NullPointerException e)
+	    {
+		    logger.info ("Group not found. No commission change.");
+		    tpoCommGroupFound = false;
+	    }
+		
+	logger.info ("tpoCommGroupFound is " + tpoCommGroupFound);
+			
+	if (tpoCommGroupFound)
+		{	excelTpoComm = EUROPA_COMM_MC.getValue("1.1_RTP_Step_Tpo_comm", "Commission", double.class, "Scheme Code", $tpoScheme.toUpperCase(), "Group", $tpoGroup);	}
+	
+	logger.info ("excelTpoComm is " + excelTpoComm);
+	
+	//Set commission to value extract from spreadsheet
+	Number DtpoCommAmount = 0.0;
+	int tpoCommAmount = 0;
+	DtpoCommAmount = ((double)excelTpoComm);
+	tpoCommAmount = DtpoCommAmount.intValue();
+	
+	if (tpoCommAmount > 0)
+		{
+			tpoCommAdjustment += tpoCommAmount;
+			logger.info("AVIVA TPO has revised fee of #" + tpoCommAdjustment);
+			$result.setBrokerAdjustment(010);
+			$result.setFee(tpoCommAdjustment);
+			$result.setRulesetChanged(true);		
+		}
+end	
+/*
+rule "Apply TPFT commissions"
+salience 600
+activation-group "Apply TPFT commissions"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	$bike : Bike(cover == "F")
+	$applicableAffinities : BaseRisk(eval(affinityCode.contains(affinity)))
+	Policy($idate : inceptionDate, $rtpType : rtpType)
+then
+    DateTime $effDate = new DateTime(2012,11,14,00,01,00,00);
+	DateTime $today = new DateTime();
+	int disAmount = 0;
+	int highBike = 0;	
+	int $inceptionDateDiff = (Days.daysBetween((ReadableInstant)$effDate,(ReadableInstant)$idate).getDays());
+	int $quoteDateDiff = (Days.daysBetween((ReadableInstant)$effDate,(ReadableInstant)$today).getDays());	
+	
+	for(Integer $group : $result.getGroups())
+		{
+			if($group > highBike)
+				highBike = $group;
+		}
+	  
+	if(nuPremTPFTCommissions.get(highBike) != null)
+		{				
+			if ( ($rtpType == RTPType.N && $quoteDateDiff < 0) || ($rtpType != RTPType.N && $inceptionDateDiff < 0) )	
+				{	
+					logger.info ("New business Renewal or AQ before criteria dates");
+					//Set commission
+					disAmount = (Integer)nuPremTPFTCommissions.get(highBike);
+					logger.info("AVIVA TPFT has revised commission of #" + disAmount);
+					$result.setBrokerAdjustment(disAmount);
+					$result.setRulesetChanged(true);		
+				}
+			else
+				{
+					logger.info ("NB quoted 01Nov2012 onwards or Rnwl/AQ with incep date of 1stNov or later");
+					//Set fee
+					disAmount = (Integer)nuPremTPFTCommissions.get(highBike);
+					logger.info("AVIVA TPFT has revised fee of #" + disAmount);
+					$result.setBrokerAdjustment(001);
+					$result.setFee(disAmount);
+					$result.setRulesetChanged(true);
+				}				
+		}	    
+end
+
+rule "Apply TPO commissions"
+salience 500
+activation-group "Apply TPO commissions"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	$bike : Bike(cover == "T")
+	$applicableAffinities : BaseRisk(eval(affinityCode.contains(affinity)))
+	Policy($idate : inceptionDate, $rtpType : rtpType)
+then
+    DateTime $effDate = new DateTime(2012,11,01,00,01,00,00);
+	DateTime $today = new DateTime();
+	int disAmount = 0;
+	int highBike = 0;	
+	int $inceptionDateDiff = (Days.daysBetween((ReadableInstant)$effDate,(ReadableInstant)$idate).getDays());
+	int $quoteDateDiff = (Days.daysBetween((ReadableInstant)$effDate,(ReadableInstant)$today).getDays());	
+	
+	for(Integer $group : $result.getGroups())
+		{
+			if($group > highBike)
+				highBike = $group;
+		}
+	  
+	if(nuPremTPFTCommissions.get(highBike) != null)
+		{				
+			if ( ($rtpType == RTPType.N && $quoteDateDiff < 0) || ($rtpType != RTPType.N && $inceptionDateDiff < 0) )	
+				{	
+					logger.info ("New business Renewal or AQ before criteria dates");
+					//Set commission
+					disAmount = (Integer)nuPremTPOCommissions.get(highBike);
+					logger.info("AVIVA TPO has revised commission of #" + disAmount);
+					$result.setBrokerAdjustment(disAmount);
+					$result.setRulesetChanged(true);		
+				}
+			else
+				{
+					logger.info ("NB quoted 01Nov2012 onwards or Rnwl/AQ with incep date of 1stNov or later");
+					//Set fee
+					disAmount = (Integer)nuPremTPOCommissions.get(highBike);
+					logger.info("AVIVA TPO has revised fee of #" + disAmount);
+					$result.setBrokerAdjustment(001);
+					$result.setFee(disAmount);
+					$result.setRulesetChanged(true);
+				}				
+		}	    	
+		
+end				 
+
+//TB11082011 JOB 6789 Increase commission for Silver Gold and Diamond in the U branch.
+//TB15082011 JOB 6346 Move commission for Silver Gold Diamond to add-on and amend commissions.
+//TB15092011 JOB 7109 Update DIAM GOLD & SILV RPT commission changes to inc excel spreadsheet.
+rule "Apply revised commission for silver gold and diamond"
+salience 400
+activation-group "Apply revised commission for silver gold and diamond"
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+    $applicableAffinities : BaseRisk(eval(spreadsheetAffinity.contains(affinity)))
+    $users : ArrayList() from collect (Userfield())
+    BaseRisk ($aff : affinity)
+    $duqs  : ArrayList()from collect (Duq())
+    Policy($idate : inceptionDate, $rtpType : rtpType)
+then 
+	//Declare variables         
+    boolean affCodeFound = true;
+    DateTime $effDate = new DateTime(2012,11,13,00,01,00,00);
+	DateTime $today = new DateTime();
+    double excelAmount = 0.0;
+    int affCodeAdjustment = 000;
+    int discountCommAmount = 0;
+    int disAmount = 0;
+	int highBike = 0;	
+	int $inceptionDateDiff = (Days.daysBetween((ReadableInstant)$effDate,(ReadableInstant)$idate).getDays());
+	int $quoteDateDiff = (Days.daysBetween((ReadableInstant)$effDate,(ReadableInstant)$today).getDays());
+        
+    //Check of affinity code exists within the spreadsheet
+    try
+	    {
+		 	Object o = EUROPA_COMM_MC.getValue( "1.1_RTP_Step_aff_duq_Y", "Affinity Code", String.class, "Affinity Code", $aff.trim().toUpperCase());
+		 	Object p = EUROPA_COMM_MC.getValue( "1.1_RTP_Step_aff_duq_N", "Affinity Code", String.class, "Affinity Code", $aff.trim().toUpperCase()); 
+
+		 	if(o.toString().equals("0.0") || p.toString().equals("0.0"))
+		 		{ 
+			 		logger.info ("object o or p is 0.0. No commission change.");
+			 		affCodeFound = false;	
+			 	}
+	    }
+	catch (NullPointerException e)
+	    {
+		    logger.info ("Affinity not found. No commission change.");
+		    affCodeFound = false;
+	    }
+    logger.info ("calcPremium is " + $result.calcPremium());                                                               
+    //If affinity code exists, extract value from spreadsheet using affinity code, premium and DD duq 
+	if( affCodeFound)
+    	{
+			for(Duq $field : (ArrayList<Duq>)$duqs)
+           	{	if($field.getNumber() == 173 && $field.getValue().equals("Y"))
+                  		{	excelAmount = (EUROPA_COMM_MC.getValue("1.1_RTP_Step_aff_duq_Y","Commission", double.class, "Affinity Code", $aff.trim().toUpperCase(), "Premium", $result.calcPremium(), true)) ;            
+                  			logger.info ("DD Duq is Y");
+                  		}
+                   else if($field.getNumber() == 173 && $field.getValue().equals("N"))
+                     	{	excelAmount = (EUROPA_COMM_MC.getValue("1.1_RTP_Step_aff_duq_N","Commission", double.class, "Affinity Code", $aff.trim().toUpperCase(), "Premium", $result.calcPremium(), true));           
+                     		logger.info ("DD Duq is N");
+                     	}
+       		}
+		                                                                                                
+		    //Set commission to value extract from spreadsheet
+		    Number DdiscountCommAmount = 0.0;
+		    DdiscountCommAmount = ((double)excelAmount);
+		    discountCommAmount = DdiscountCommAmount.intValue();
+		    
+		    if (discountCommAmount != 0)
+		    	{		    					
+					if ( ($rtpType == RTPType.N && $quoteDateDiff < 0) || ($rtpType != RTPType.N && $inceptionDateDiff < 0) )	
+						{	
+							logger.info ("New business Renewal or AQ before criteria dates");
+							//Set commission
+							affCodeAdjustment += discountCommAmount;
+						    $result.setBrokerAdjustment(affCodeAdjustment);
+						    $result.setRulesetChanged(true);
+						    logger.info ($aff.trim().toUpperCase() + " affinity - Commission revised to #" + $result.getBrokerAdjustment());								
+						}
+					else
+						{
+							logger.info ("NB quoted 13Nov2012 onwards or Rnwl/AQ with incep date of 1stNov or later");
+							//Set fee
+							//affCodeAdjustment += discountCommAmount;
+						    //$result.setBrokerAdjustment(001);
+						    //$result.setFee(affCodeAdjustment);
+						    //$result.setRulesetChanged(true);
+						    //logger.info ($aff.trim().toUpperCase() + " affinity - Fee revised to #" + affCodeAdjustment);
+						    
+						    
+						    if (discountCommAmount < 0)
+						    	{
+						    		//Set commission
+									affCodeAdjustment += discountCommAmount;
+								    $result.setBrokerAdjustment(affCodeAdjustment);
+								    $result.setFee(001);
+								    $result.setRulesetChanged(true);
+								    logger.info ($aff.trim().toUpperCase() + " aff - Comm revised to #" + $result.getBrokerAdjustment() + ".Fee set to zero");
+								 }
+							else
+								{
+									//Set fee
+									affCodeAdjustment += discountCommAmount;
+								    $result.setBrokerAdjustment(001);
+								    $result.setFee(affCodeAdjustment);
+								    $result.setRulesetChanged(true);
+								    logger.info ($aff.trim().toUpperCase() + " aff - Fee revised to #" + affCodeAdjustment);
+								}						    						
+						}			    		
+			    }        		
+        }          
+end
+
+rule "CC11 Castle Combe commission reduction"
+salience 300
+activation-group "CC11 Castle Combe commission reduction"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	BaseRisk (affinity == "MCD", $subAgent : subAgent)
+	Policy($idate : inceptionDate, $rtpType : rtpType)
+then
+	DateTime $effDate = new DateTime(2012,11,14,00,01,00,00);
+	DateTime $today = new DateTime();
+	int $inceptionDateDiff = (Days.daysBetween((ReadableInstant)$effDate,(ReadableInstant)$idate).getDays());
+	int $quoteDateDiff = (Days.daysBetween((ReadableInstant)$effDate,(ReadableInstant)$today).getDays());
+	
+	logger.info ("currently commission is set to " + $result.getBrokerAdjustment());
+	logger.info ("Fee is currently at " + $result.getFee());
+	
+	if ($subAgent.trim().toUpperCase().equals("CC11"))
+		{	    		    					
+			if ( ($rtpType == RTPType.N && $quoteDateDiff < 0) || ($rtpType != RTPType.N && $inceptionDateDiff < 0) )	
+				{	
+					logger.info ("New business Renewal or AQ before criteria dates");
+					//Set commission
+					int updatedComm = $result.getBrokerAdjustment() - 2500;
+			
+					//Net rated commission cannot be zero or it will use back office settings
+					if (updatedComm == 000)
+						{	updatedComm = 010;	}    			
+	    			
+	    			$result.setBrokerAdjustment(updatedComm);
+					$result.setRulesetChanged(true);
+					logger.info ("CC11 sub agent and MCD affinity. Commission updated to " + updatedComm);				    								
+				}
+			else
+				{
+					logger.info ("NB quoted 01Nov2012 onwards or Rnwl/AQ with incep date of 1stNov or later");
+					int updatedFee = $result.getFee() - 2500;
+			
+					//Net rated commission cannot be zero or it will use back office settings
+					if (updatedFee == 000)
+						{	updatedFee = 010;	}
+			        
+			        if (updatedFee < 0)
+						{
+							//Set commission
+							$result.setBrokerAdjustment(updatedFee);
+							$result.setFee(001);
+							$result.setRulesetChanged(true);
+							logger.info ("CC11 sub agent and MCD affinity. Commission updated to " + updatedFee);
+						}
+					else
+						{
+							//Set fee
+							$result.setBrokerAdjustment(001);
+							$result.setFee(updatedFee);
+							$result.setRulesetChanged(true);
+							logger.info ("CC11 sub agent and MCD affinity. Fee updated to " + updatedFee);
+						}			        
+				}	
+		}
+end
+
+rule "BLD commission reduction"
+salience 200
+activation-group "BLD commission reduction"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	$applicableAffinities : BaseRisk(eval(bldAffinityCode.contains(affinity)))
+	BaseRisk ( $subAgent : subAgent)
+	Policy($idate : inceptionDate, $rtpType : rtpType)
+then
+	DateTime $effDate = new DateTime(2012,11,01,00,01,00,00);
+	DateTime $today = new DateTime();
+	int $inceptionDateDiff = (Days.daysBetween((ReadableInstant)$effDate,(ReadableInstant)$idate).getDays());
+	int $quoteDateDiff = (Days.daysBetween((ReadableInstant)$effDate,(ReadableInstant)$today).getDays());
+	
+	int commAfterDiscount = $result.getBrokerAdjustment() - 4000;
+	if ( commAfterDiscount  == 0000)
+		{	commAfterDiscount = -010;	}
+		
+		
+	int feeAfterDiscount = $result.getFee() - 4000;
+	if ( feeAfterDiscount  == 0000)
+		{	feeAfterDiscount = -010;	}	
+	
+	if ($subAgent.trim().toUpperCase().equals("BLD"))
+		{
+			if ( ($rtpType == RTPType.N && $quoteDateDiff < 0) || ($rtpType != RTPType.N && $inceptionDateDiff < 0) )
+				{
+					logger.info ("New business Renewal or AQ before criteria dates");
+					//Set commission
+					$result.setBrokerAdjustment(commAfterDiscount);  
+					$result.setRulesetChanged(true);
+					logger.info ("BLD sub agent. Commission updated to " + commAfterDiscount  );
+				}
+			else 
+				{
+					logger.info ("NB quoted 01Nov2012 onwards or Rnwl/AQ with incep date of 1stNov or later");
+					//Set fee
+					$result.setBrokerAdjustment(001);
+			        $result.setFee(feeAfterDiscount);
+			        $result.setRulesetChanged(true);
+			        logger.info ("BLD sub agent. Fee updated to " + feeAfterDiscount);
+			
+				}
+		}
+end
+
+rule "apply subagent commission change"
+salience 100
+activation-group "apply subagent commission change"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	$users : ArrayList() from collect (Userfield ())
+	$duqs  : ArrayList() from collect (Duq())
+	BaseRisk ( $subAgent : subAgent)
+	Policy( rtpType == RTPType.N, $idate : inceptionDate)	
+then
+	boolean subAgentFound = true;
+	DateTime $effDate = new DateTime(2012,10,29,00,01,00,00);
+	DateTime $today = new DateTime();
+	double excelCommissionAmount = 0.0;
+	int $quoteDateDiff = (Days.daysBetween((ReadableInstant)$effDate,(ReadableInstant)$today).getDays());
+    int subAgentAdjustment = 000, discCommAmount = 0;
+    int uwPrem = $result.getAlgPremium() + $result.getInsurerLoad().getValue() - $result.getInsurerDiscount().getValue();
+	String $ddDuq = "";
+	String $subAgentCode = "SUB" + $subAgent.trim().toUpperCase();
+	
+	logger.info ("uwPrem is " + uwPrem);
+	
+	//Check if subagent exists within spreadsheet
+	try
+		{
+			Object r = EUROPA_COMM_MC.getValue( "1.1_RTP_Step_sub_duq_N", "Subagent Code", String.class, "Subagent Code", $subAgentCode);
+			Object s = EUROPA_COMM_MC.getValue( "1.1_RTP_Step_sub_duq_Y", "Subagent Code", String.class, "Subagent Code", $subAgentCode); 
+	
+			if(r.toString().equals("0.0") || s.toString().equals("0.0"))
+				{ 
+					logger.info ("No commission change as subagent not listed.");
+					subAgentFound = false;	
+				}
+		}
+	catch (NullPointerException e)
+		{
+			logger.info ("Subagent not listed. No commission change.");
+			subAgentFound = false;
+		}
+	
+	if (subAgentFound)
+		{	
+			for(Duq $field : (ArrayList<Duq>)$duqs)
+	           	{	if($field.getNumber() == 173 && $field.getValue().equals("N"))
+	                  		{	
+	                  			excelCommissionAmount = (EUROPA_COMM_MC.getValue("1.1_RTP_Step_sub_duq_N","Commission", double.class, "Subagent Code", $subAgentCode, "Premium", uwPrem, true)) ;            
+	                  			$ddDuq = "No";
+	                  		}
+	                   else if($field.getNumber() == 173 && $field.getValue().equals("Y"))
+	                     	{	
+	                     		excelCommissionAmount = (EUROPA_COMM_MC.getValue("1.1_RTP_Step_sub_duq_Y","Commission", double.class, "Subagent Code", $subAgentCode,  "Premium", uwPrem, true));           
+	                     		$ddDuq = "Yes";
+	                     	}
+	       		}	
+			logger.info ("excelCommissionAmount is " + excelCommissionAmount);
+			//Set commission to value extract from spreadsheet
+			Number DdiscCommAmount = 0.0;
+			DdiscCommAmount = ((double)excelCommissionAmount);
+			discCommAmount = DdiscCommAmount.intValue();
+			
+			//As net rated, cannot be zero commission as will set commission to back office parameter
+			if (discCommAmount == 0)
+				{ 	discCommAmount = 010;	}
+
+			subAgentAdjustment += discCommAmount;
+			
+			if ( $quoteDateDiff < 0 )
+				{
+					logger.info ("New business before criteria dates");
+					//Set commission
+					$result.setBrokerAdjustment(subAgentAdjustment);  
+					$result.setRulesetChanged(true);
+					logger.info ($result.getSchemeCode() + " DD Duq is " + $ddDuq + " and " + $subAgentCode + ".Commission revised to #" + $result.getBrokerAdjustment());
+				}
+			else
+				{
+					logger.info ("NB quoted 01Nov2012 onwards ");
+					//Set fee
+					//$result.setBrokerAdjustment(001);
+			        //$result.setFee(subAgentAdjustment);
+			        //$result.setRulesetChanged(true);
+			        //logger.info ($result.getSchemeCode() + " DD Duq is " + $ddDuq + " and " + $subAgentCode + ".Fee revised to #" + $result.getFee());			
+				
+					if (subAgentAdjustment < 0)
+					   	{
+					   		//Set commission
+						    $result.setBrokerAdjustment(subAgentAdjustment);
+						    $result.setFee(001);
+						    $result.setRulesetChanged(true);
+						    logger.info ($result.getSchemeCode() + " DD Duq is " + $ddDuq + " and " + $subAgentCode + ".Commission revised to #" + $result.getBrokerAdjustment());
+						 }
+					else
+						{
+							//Set fee
+						    $result.setBrokerAdjustment(001);
+						    $result.setFee(subAgentAdjustment);
+						    $result.setRulesetChanged(true);
+						    logger.info ($result.getSchemeCode() + " DD Duq is " + $ddDuq + " and " + $subAgentCode + ".Fee revised to #" + $result.getFee());
+						}				
+				}	
+		}	
+end
+
+
+rule "apply fee instead of commission"
+salience 50
+activation-group "apply fee instead of commission"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+then
+	$result.setBrokerAdjustment(-4444);
+	$result.setFee(001);
+	$result.setRulesetChanged(true);
+	logger.info ($result.getSchemeCode() + " Comm set to MINUS #4444 and Fee set to 1p");
+end
+*/

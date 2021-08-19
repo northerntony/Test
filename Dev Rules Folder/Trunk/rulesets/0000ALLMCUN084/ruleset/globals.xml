@@ -1,0 +1,75 @@
+<globals>
+<!--
+Creation Date: 13th November 2009
+Author: 		Tony Bailey
+Requirements:	MCD Select applying various discounts based on underwriting criteria.
+
+History
+Date		Version	Author	Description of Change
+04/01/18	071		TB		REDMINE 2471 Correction required as MCD renewal capping developed on 2362 is also applying on Ridersure in error. Also, remove any obsolete comments prior to 2016.
+14/02/18	072		TB		REDMINE 2569 Add caps to Even DOBS (MCD renewals).
+06/03/18	073		TB		REDMINE 2635 Add caps to MCD GOLD and Diamond.
+20/03/18	074		TB		REDMINE 2604 Ageas - Bike Value Discounts and Loads.
+26/03/18	075		TB		REDMINE 2675 MCD Gold & Diamond additional Commission correction.
+03/05/18	076		TB		REDMINE 2704 New NCD Collars - Evens days of DOBs only. Also, remove variable fees as NLR.
+05/06/18	077		TB		REDMINE 2765 DUQ based pricing.
+20/06/18	078		TB		REDMINE 2852 Ageas Select discounts.
+17/07/18	079		TB		REDMINE 2711 Marketing Subagent Setup.
+25/07/18	080		TB		REDMINE 2998 MCD & AA Collar and Cap re-alignment.
+17/06/19	081		TB		REDMINE 3822 Ridersure - Extend commission increase rule for no breakdown cover. Also, remove obsolete comments prior to 2017.
+06/12/19	082		TB		REDMINE 4210 Ridersure commission/fee increase.
+15/01/20	083		TB		REDMINE 4339 MCD Commission Spreadsheet Update (for testing). Also, remove obsolete comments prior to 2018.
+03/03/20	084		TB		Modifications development work.
+-->
+	<global name = "schemes">
+		<tree-set>
+			<no-comparator />
+			<string>UN</string>
+		</tree-set>
+	</global>
+
+	<global name="ridersureAffinityCode">
+		<tree-set>
+			<no-comparator />
+			<string>RIDE</string>
+			<string>SPEC</string>
+		</tree-set>
+	</global>
+
+	<global name="declineOccupations">
+		<map>
+			<entry> <string>715</string> <int>500</int> </entry> <!-- FAST FOOD PROPRIETOR -->
+			<entry> <string>090</string> <int>500</int> </entry> <!-- COOK -->
+			<entry> <string>136</string> <int>500</int> </entry> <!-- FISH FRYER -->
+			<entry> <string>271</string> <int>500</int> </entry> <!-- RESTAURANT MANAGER -->
+			<entry> <string>272</string> <int>500</int> </entry> <!-- RESTAURANTEUR -->
+			<entry> <string>360</string> <int>500</int> </entry> <!-- WAITER -->
+			<entry> <string>361</string> <int>500</int> </entry> <!-- WAITRESS -->
+			<entry> <string>591</string> <int>500</int> </entry> <!-- ASSISTANT COOK -->
+			<entry> <string>604</string> <int>500</int> </entry> <!-- CAFE OWNER -->
+			<entry> <string>605</string> <int>500</int> </entry> <!-- CAFE STAFF -->
+			<entry> <string>611</string> <int>500</int> </entry> <!-- CATERING MANAGER -->
+			<entry> <string>661</string> <int>500</int> </entry> <!-- FACTORY CANTEEN MANAGER -->
+			<entry> <string>686</string> <int>500</int> </entry> <!-- CAFE WORKER -->
+			<entry> <string>904</string> <int>500</int> </entry> <!-- PASTRY CHEF -->
+			<entry> <string>B91</string> <int>500</int> </entry> <!-- CATERING CONSULTANT -->
+			<entry> <string>C08</string> <int>500</int> </entry> <!-- CATERER -->
+			<entry> <string>C09</string> <int>500</int> </entry> <!-- MOBILE CATERER -->
+			<entry> <string>C10</string> <int>500</int> </entry> <!-- CATERING STAFF -->
+			<entry> <string>C13</string> <int>500</int> </entry> <!-- CHEF -->
+			<entry> <string>D76</string> <int>500</int> </entry> <!-- HOME ECONOMIST -->
+		</map>
+	</global>
+
+	<global name="claimsMatrix">
+		<map>
+			<entry>	<string>noFaultClaims</string> 	<float>1.000</float> </entry>
+			<entry>	<string>faultClaims</string> 	<float>1.100</float> </entry>
+		</map>
+	</global>
+
+	<global name="DEBUG">
+		<boolean>TRUE</boolean>
+	</global>
+
+</globals>

@@ -1,0 +1,95 @@
+<globals>
+<!--
+Creation Date:  28th September 2009
+Author: 		Tony Bailey
+Requirements:	Europa Select, AF, commission defaulted to £40.00 in back office.
+				Extra NCB discount and ownership length discounts and loads. In addition, ensure Ridersure commission set to 25%.
+				Increase commission for GOLD affinity. 
+History
+Date		Version	Author	Description of Change
+17/01/17	064		TB		REDMINE 1499 Adjust MCD Renewal Cap on collars. Also, tidy code by removing any obsolete code and comments prior to 2015.
+28/03/17	065		TB		REDMINE 1602 Legislative IPT Increase to 12% for MCD/Ridersure Motorcycle.
+04/07/17	066		TB		REDMINE 1779 AF Amendments to minimum premiums.
+29/08/17	067		TB		REDMINE 2130 A Plan - Capping Rules - Europa Underwriting via Ridersure.
+05/10/17	068		TB		REDMINE 2138 Europa AF - New Rebroke & Insurer discounts plus amend minimum premiums.
+03/11/17	069		TB		REDMINE 2327 Europa Underwriting - Minimum Premiums - MCD/Ridersure.
+22/11/17	070		TB		REDMINE 2362 MCD Renewal Capping.
+04/01/18	071		TB		REDMINE 2471 Correction required as MCD renewal capping developed on 2362 is also applying on Ridersure in error. Also, remove any obsolete comments prior to 2016.
+09/01/18	072		TB		REDMINE 2394 Europa Underwriting - 40% Discount - Ownership.
+23/01/18	073		TB		REDMINE 2508 Gold/Diamond concession amendments.
+14/02/18	074		TB		REDMINE 2569 Add caps to Even DOBS (MCD renewals).
+16/02/18	075		TB		REDMINE 2560 Europa UW - Minimum premiums - AF only.
+06/03/18	076		TB		REDMINE 2635 Add caps to MCD GOLD and Diamond.
+20/03/18	077		TB		REDMINE 2631 AP & AF 2nd bike experience/cc concession.
+22/03/18	078		TB		REDMINE 2662 AF Trial discount - £5 insurer discount (All policies).
+26/03/18	079		TB		REDMINE 2675 MCD Gold & Diamond additional Commission correction.
+03/05/18	080		TB		REDMINE 2704 New NCD Collars - Evens days of DOBs only. Also, remove variable fees as NLR.
+21/05/18	081		TB		REDMINE 2731 AF: Comp minimum premium change MCD/RIDERSURE & AA/RAC. Also, amend Trail Insurer discount from Redmine 2662.
+05/06/18	082		TB		REDMINE 2765 DUQ based pricing.
+17/07/18	083		TB		REDMINE 2711 Marketing Subagent Setup.
+25/07/18	084		TB		REDMINE 2998 MCD & AA Collar and Cap re-alignment.
+22/08/18	085		TB		REDMINE 3063 EUW AF: 3% load. Also, remove expired 5% trial concession.
+13/09/18	086		TB		REDMINE	3124 AF Minimum premium change for 1st Oct 2018.
+07/03/19	087		TB		REDMINE 3470 AF - £4 discount - MCD. Also, tidy code by removing any obsolete code and comments prior to 2017.
+15/04/19	088		TB		REDMINE 3636 IDV, Minimum Premium discount update - EUW AF scheme place marker for RTP.
+20/05/19	089		TB		REDMINE 3718 EUW AF 5% discount Tenure rule update.
+17/06/19	090		TB		REDMINE 3822 Ridersure - Extend commission increase rule for no breakdown cover.
+18/07/19	091		TB		REDMINE 3905 EUQ - AF - Early rate release plus minimum premium changes.
+11/09/19	092		TB		REDMINE 4013 EUW - AF - Discount amendment.
+-->
+	<global name = "schemes">
+		<tree-set>
+			<no-comparator />
+			<string>AF</string>
+		</tree-set>
+	</global>
+
+	<global name="ridersureAffinityCode">
+		<tree-set>
+			<no-comparator />
+			<string>RIDE</string>
+			<string>SPEC</string>
+		</tree-set>
+	</global>
+
+	<!--  TB20032018 REDMINE 2631 AP & AF 2nd bike experience/cc concession -->
+	<global name="compSecondBikeDiscounts">
+		<map>
+			<entry>	<int>2</int>	<int>130</int> </entry> <!-- 13% -->
+			<entry>	<int>3</int>	<int>260</int> </entry> <!-- 26% -->
+			<entry>	<int>4</int>	<int>340</int> </entry> <!-- 34% -->
+			<entry>	<int>5</int>	<int>380</int> </entry> <!-- 38% -->
+			<entry>	<int>6</int>	<int>390</int> </entry> <!-- 39% -->
+			<entry>	<int>7</int>	<int>410</int> </entry> <!-- 41% -->
+		</map>
+	</global>
+
+	<!--  TB20032018 REDMINE 2631 AP & AF 2nd bike experience/cc concession -->
+	<global name="tpftSecondBikeDiscounts">
+		<map>
+			<entry>	<int>2</int>	<int>410</int> </entry> <!-- 41% -->
+			<entry>	<int>3</int>	<int>470</int> </entry> <!-- 47% -->
+			<entry>	<int>4</int>	<int>480</int> </entry> <!-- 48% -->
+			<entry>	<int>5</int>	<int>520</int> </entry> <!-- 52% -->
+			<entry>	<int>6</int>	<int>530</int> </entry> <!-- 53% -->
+			<entry>	<int>7</int>	<int>530</int> </entry> <!-- 53% -->
+		</map>
+	</global>
+
+	<!--  TB20032018 REDMINE 2631 AP & AF 2nd bike experience/cc concession -->
+	<global name="tpoSecondBikeDiscounts">
+		<map>
+			<entry>	<int>2</int>	<int>410</int> </entry> <!-- 41% -->
+			<entry>	<int>3</int>	<int>470</int> </entry> <!-- 47% -->
+			<entry>	<int>4</int>	<int>480</int> </entry> <!-- 48% -->
+			<entry>	<int>5</int>	<int>520</int> </entry> <!-- 52% -->
+			<entry>	<int>6</int>	<int>530</int> </entry> <!-- 53% -->
+			<entry>	<int>7</int>	<int>530</int> </entry> <!-- 53% -->
+		</map>
+	</global>
+
+	<global name="DEBUG">
+		<boolean>TRUE</boolean>
+	</global>
+
+</globals>

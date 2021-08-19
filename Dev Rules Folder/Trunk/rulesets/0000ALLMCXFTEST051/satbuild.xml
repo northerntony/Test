@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- ====================================================================== 
+     13 Mar 2008                                                        
+
+     project    
+     description
+                   
+     ChrisS                                                                
+     ====================================================================== -->
+<project name="rules" default="junit-production">
+    <description>
+            description
+    </description>
+	
+	<basename file="." property="ruleset.name"/>
+	
+	
+	<import file="../../../../common/build.xml" />
+	
+</project>

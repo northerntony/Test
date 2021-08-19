@@ -1,0 +1,91 @@
+<globals>
+<!--
+Creation Date: 21st December 2016
+Author: 		Tony Bailey
+Requirements:	Rules for AP scheme.
+
+History
+Date		Version	Author	Description of Change
+28/03/17	002		TB		REDMINE 1602 Legislative IPT Increase to 12% for MCD/Ridersure Motorcycle.
+11/04/17	003		HN		REDMINE 1814 Dual Garaging Decline.
+			003		HN		REDMINE 1778 Update Underwriter Minimum Premium.
+06/07/17	004		TB		REDMINE 2040 EUW SDP&C and < 125cc rules for AP scheme.
+03/08/17	005		TB		REDMINE 2075 Europa Basic (AP) rule change.
+29/08/17	006		TB		REDMINE 2130 A Plan - Capping Rules - Europa Underwriting via Ridersure.
+09/10/17	007		TB		REDMINE 2139 Europa AP - New rebroke & insurer discount.
+03/11/17	008		TB		REDMINE 2327 Europa Underwriting - Minimum Premiums - MCD/Ridersure.
+22/11/17	009		TB		REDMINE 2362 MCD Renewal Capping.
+04/01/18	010		TB		REDMINE 2471 Correction required as MCD renewal capping developed on 2362 is also applying on Ridersure in error.
+14/02/18	011		TB		REDMINE 2569 Add caps to Even DOBS (MCD renewals).
+06/03/18	012		TB		REDMINE 2635 Add caps to MCD GOLD and Diamond.
+20/03/18	013		TB		REDMINE 2631 AP & AF 2nd bike experience/cc concession.
+26/03/18	014		TB		REDMINE 2675 MCD Gold & Diamond additional Commission correction.
+03/05/18	015		TB		REDMINE 2704 New NCD Collars - Evens days of DOBs only. Also, remove variable fees as NLR.
+05/06/18	016		TB		REDMINE 2765 DUQ based pricing.
+17/07/18	017		TB		REDMINE 2711 Marketing Subagent Setup.
+25/07/18	018		TB		REDMINE 2998 MCD & AA Collar and Cap re-alignment.
+11/12/18	019		TB		REDMINE 3215 Removal of Load on AP scheme wef 1st Jan 2019.
+06/03/19	020		TB		REDMINE 3469 EUW - AP - Rate change. Also, remove obsolete comments prior to 2017.
+07/05/19	021		TB		REDMINE 3665 EUW - Licence - AP 4% load Provisional 2% discount full licence UK licences NB only.
+17/06/19	022		TB		REDMINE 3822 Ridersure - Extend commission increase rule for no breakdown cover.
+21/08/19	023		TB		REDMINE 3976 EUW - AP - Loads ahead of rate release.
+16/09/19	024		TB		REDMINE 4029 EUW - AP - Mileage Load.
+-->
+	<global name = "schemes">
+		<tree-set>
+			<no-comparator />
+			<string>AP</string>
+		</tree-set>
+	</global>
+
+	<global name="ridersureAffinityCode">
+		<tree-set>
+			<no-comparator />
+			<string>RIDE</string>
+			<string>SPEC</string>
+		</tree-set>
+	</global>
+
+<!--  TB20032018 REDMINE 2631 AP & AF 2nd bike experience/cc concession -->
+	<global name="compSecondBikeDiscounts">
+		<map>
+			<entry>	<int>2</int>	<int>290</int> </entry> <!-- 29% -->
+			<entry>	<int>3</int>	<int>340</int> </entry> <!-- 34% -->
+			<entry>	<int>4</int>	<int>370</int> </entry> <!-- 37% -->
+			<entry>	<int>5</int>	<int>400</int> </entry> <!-- 40% -->
+			<entry>	<int>6</int>	<int>400</int> </entry> <!-- 40% -->
+			<entry>	<int>7</int>	<int>430</int> </entry> <!-- 43% -->
+			<entry>	<int>8</int>	<int>430</int> </entry> <!-- 43% -->
+			<entry>	<int>9</int>	<int>440</int> </entry> <!-- 44% -->
+		</map>
+	</global>
+
+	<!--  TB20032018 REDMINE 2631 AP & AF 2nd bike experience/cc concession -->
+	<global name="tpftSecondBikeDiscounts">
+		<map>
+			<entry>	<int>2</int>	<int>290</int> </entry> <!-- 29% -->
+			<entry>	<int>3</int>	<int>340</int> </entry> <!-- 34% -->
+			<entry>	<int>4</int>	<int>360</int> </entry> <!-- 36% -->
+			<entry>	<int>5</int>	<int>410</int> </entry> <!-- 41% -->
+			<entry>	<int>6</int>	<int>420</int> </entry> <!-- 42% -->
+			<entry>	<int>7</int>	<int>430</int> </entry> <!-- 43% -->
+			<entry>	<int>8</int>	<int>430</int> </entry> <!-- 43% -->
+			<entry>	<int>9</int>	<int>440</int> </entry> <!-- 44% -->
+		</map>
+	</global>
+
+	<!--  TB20032018 REDMINE 2631 AP & AF 2nd bike experience/cc concession -->
+	<global name="tpoSecondBikeDiscounts">
+		<map>
+			<entry>	<int>2</int>	<int>310</int> </entry> <!-- 31% -->
+			<entry>	<int>3</int>	<int>360</int> </entry> <!-- 36% -->
+			<entry>	<int>4</int>	<int>380</int> </entry> <!-- 38% -->
+			<entry>	<int>5</int>	<int>420</int> </entry> <!-- 42% -->
+			<entry>	<int>6</int>	<int>430</int> </entry> <!-- 43% -->
+			<entry>	<int>7</int>	<int>450</int> </entry> <!-- 45% -->
+			<entry>	<int>8</int>	<int>450</int> </entry> <!-- 45% -->
+			<entry>	<int>9</int>	<int>460</int> </entry> <!-- 46% -->
+		</map>
+	</global>
+
+</globals>

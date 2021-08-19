@@ -1,0 +1,23 @@
+<package>
+	<active-rules>0000ALLMCAP024</active-rules>
+	<ruleset name="0000ALLMCAP024">
+		<globals>globals.xml</globals>
+		<rules>rules.drl</rules>
+		<excelfiles>
+			<excelfile>
+				<excelfilename>EUROPA_COMM_MC</excelfilename>
+				<path>EUROPA_COMM_MC.xls</path>
+			</excelfile>
+			<excelfile>
+				<excelfilename>EUROPA_FORD_IPT</excelfilename>
+				<path>EUROPA_FORD_IPT.xls</path>
+			</excelfile>
+		</excelfiles>
+		<csvfiles>
+			<csvfile>
+				<csvfilename>aplanBranches</csvfilename>
+				<path>aplanBranches.csv</path>
+			</csvfile>
+		</csvfiles>
+	</ruleset>
+</package>

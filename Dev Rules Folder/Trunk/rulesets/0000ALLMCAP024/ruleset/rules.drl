@@ -1,0 +1,1860 @@
+/*
+Creation Date: 21st December 2016
+Author: 		Tony Bailey
+Requirements:	Rules for AP scheme.
+
+History
+Date		Version	Author	Description of Change
+28/03/17	002		TB		REDMINE 1602 Legislative IPT Increase to 12% for MCD/Ridersure Motorcycle.
+11/04/17	003		HN		REDMINE 1814 Dual Garaging Decline.
+			003		HN		REDMINE 1778 Update Underwriter Minimum Premium.
+06/07/17	004		TB		REDMINE 2040 EUW SDP&C and < 125cc rules for AP scheme.
+03/08/17	005		TB		REDMINE 2075 Europa Basic (AP) rule change.
+22/08/17	006		TB		REDMINE 2130 A Plan - Capping Rules - Europa Underwriting via Ridersure.
+09/10/17	007		TB		REDMINE 2139 Europa AP - New rebroke & insurer discount.
+03/11/17	008		TB		REDMINE 2327 Europa Underwriting - Minimum Premiums - MCD/Ridersure.
+22/11/17	009		TB		REDMINE 2362 MCD Renewal Capping.
+04/01/18	010		TB		REDMINE 2471 Correction required as MCD renewal capping developed on 2362 is also applying on Ridersure in error.
+14/02/18	011		TB		REDMINE 2569 Add caps to Even DOBS (MCD renewals).
+06/03/18	012		TB		REDMINE 2635 Add caps to MCD GOLD and Diamond.
+20/03/18	013		TB		REDMINE 2631 AP & AF 2nd bike experience/cc concession.
+26/03/18	014		TB		REDMINE 2675 MCD Gold & Diamond additional Commission correction.
+03/05/18	015		TB		REDMINE 2704 New NCD Collars - Evens days of DOBs only. Also, remove variable fees as NLR.
+05/06/18	016		TB		REDMINE 2765 DUQ based pricing.
+17/07/18	017		TB		REDMINE 2711 Marketing Subagent Setup.
+25/07/18	018		TB		REDMINE 2998 MCD & AA Collar and Cap re-alignment.
+11/12/18	019		TB		REDMINE 3215 Removal of Load on AP scheme wef 1st Jan 2019.
+06/03/19	020		TB		REDMINE 3469 EUW - AP - Rate change. Also, remove obsolete comments prior to 2017.
+07/05/19	021		TB		REDMINE 3665 EUW - Licence - AP 4% load Provisional 2% discount full licence UK licences NB only.
+17/06/19	022		TB		REDMINE 3822 Ridersure - Extend commission increase rule for no breakdown cover.
+21/08/19	023		TB		REDMINE 3976 EUW - AP - Loads ahead of rate release.
+16/09/19	024		TB		REDMINE 4029 EUW - AP - Mileage Load.
+*/
+package uk.co.cdl.rtpm.models;
+
+global org.apache.log4j.Logger logger;
+import java.util.ArrayList;
+import uk.co.cdl.rtpm.models.mc.Bike;
+import uk.co.cdl.rtpm.models.mc.Proposer;
+import uk.co.cdl.rtpm.models.mc.Result;
+import uk.co.cdl.rtpm.models.mc.Rider;
+import uk.co.cdl.rtpm.models.mc.Risk;
+import uk.co.cdl.rtpm.models.motor.Claim;
+import uk.co.cdl.rtpm.models.motor.Conviction;
+import uk.co.cdl.rtpm.models.motor.MotorVehicle;
+import org.joda.time.DateTime;
+import org.joda.time.Days;
+import org.joda.time.ReadableInstant;
+import org.joda.time.Years;
+//TB06072017 REDMINE 2040
+import org.joda.time.LocalDate;
+//TB29082017 REDMINE #2130
+import uk.co.cdl.rtpm.models.csv.CsvFile;
+import uk.co.cdl.rtpm.models.csv.CsvHelper;
+
+/* Globals */
+global java.util.Set ridersureAffinityCode;
+global java.util.Set schemes;
+global uk.co.cdl.rtpm.models.excel.ExcelFile EUROPA_COMM_MC;
+//TB28032017 REDMINE 1602
+global uk.co.cdl.rtpm.models.excel.ExcelFile EUROPA_FORD_IPT;
+//TB29082017 REDMINE #2130
+global uk.co.cdl.rtpm.models.csv.CsvFile aplanBranches;
+//TB20032018 REDMINE 2631
+global java.util.HashMap compSecondBikeDiscounts;
+global java.util.HashMap tpftSecondBikeDiscounts;
+global java.util.HashMap tpoSecondBikeDiscounts;
+
+rule "Setup"
+salience 5500
+when
+	$results : ResultList()
+then
+	$results.sortByAlgPremium();
+	for(BaseResult result : $results)
+		{	update(result);	}
+end
+
+//HN11042017 REDMINE 1788 Update Underwriter Minimum Premium.
+//TB03112017 REDMINE 2327 Europa Underwriting - Minimum Premiums - MCD/Ridersure.
+rule "gold diamond discount"
+salience 5000
+activation-group "gold diamond discount"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	BaseRisk (affinity == "GOLD" || affinity == "DIAM" || affinity == "GLD2")
+	BaseRisk ($aff : affinity)
+	$riders : ArrayList() from collect (Rider())
+	ArrayList(size < 2)from collect (Bike())
+	Bike ( $riskCover : cover)
+	ArrayList( size < 1) from collect (Claim (age < 3 && fault  == true))
+	ArrayList( size < 1) from collect (Conviction (age < 5))
+then
+	boolean licRequirementsMet = true;
+	int $currentAlg = $result.getAlgPremium() - $result.getInsurerDiscount().getValue() + $result.getInsurerLoad().getValue();
+	int goldDiamDiscount = 0, goldDiamLoad = 0;
+	int $revisedAlg = $currentAlg - (($currentAlg * 5) / 100);
+	int minimumPremium = 6900;
+	int youngestAge = 99;
+	String insurerReference = $aff.trim().toUpperCase();
+
+	for (Rider $rid : (ArrayList<Rider>) $riders)
+		{
+			if ($rid.getAge() < youngestAge)
+				{	youngestAge = $rid.getAge();	}
+									
+			if (!$rid.getBikeLicence().getType().equals("F") || ($rid.getBikeLicence().getType().equals("F") && $rid.getBikeLicence().getAge() < 1) )
+				{ 	licRequirementsMet = false;	}
+		}
+
+	//Set minimum premiums and check if after discount alg is breached
+	if ($riskCover.equals("C"))
+		{	minimumPremium = 6900;	}
+	else if ($riskCover.equals("F"))
+		{	minimumPremium = 6400;	}
+	else if($riskCover.equals("T"))
+		{	minimumPremium = 6400;	}
+
+	if ($revisedAlg < minimumPremium)
+			{	$revisedAlg = minimumPremium;	}
+
+	if (licRequirementsMet && youngestAge >= 25 && ($result.getAlgPremium() > minimumPremium))
+		{
+			if ($revisedAlg < $result.getAlgPremium())
+				{
+					//calc and apply discount
+					goldDiamDiscount = $result.getAlgPremium() - $revisedAlg;
+					InsurerLoad insLoad = new InsurerLoad();
+					insLoad.setValue(0);
+					$result.setInsurerLoad(insLoad);
+					InsurerDiscount insDis = new InsurerDiscount();
+					insDis.setValue(goldDiamDiscount);			
+					$result.setInsurerDiscount(insDis);
+					insDis.setRef(insurerReference);
+					$result.setRulesetChanged(true);
+					logger.info("After Gold/Diamond concession, discount allowed of " + goldDiamDiscount);					
+				}
+			else if ($revisedAlg > $result.getAlgPremium())
+				{
+					//calc and apply load
+					goldDiamLoad = $revisedAlg - $result.getAlgPremium();
+					InsurerDiscount insDis = new InsurerDiscount();
+					insDis.setValue(0);
+					$result.setInsurerDiscount(insDis);
+					InsurerLoad insLoad = new InsurerLoad();
+					insLoad.setValue(goldDiamLoad);
+					insLoad.setRef(insurerReference);
+					$result.setInsurerLoad(insLoad);
+					$result.setRulesetChanged(true);
+					logger.info("After Gold/Diamond concession, load applied of " + goldDiamLoad);				   	
+				}
+			else if ($revisedAlg == $result.getAlgPremium())
+				{
+					//set discount and load to zero
+					InsurerDiscount insDis = new InsurerDiscount();
+					insDis.setValue(0);
+					$result.setInsurerDiscount(insDis);	
+					InsurerLoad insLoad = new InsurerLoad();
+					insLoad.setValue(0);
+					$result.setInsurerLoad(insLoad);
+					$result.setRulesetChanged(true);
+					logger.info("After Gold/Diamond concession, discount and load revised to zero.");
+				}
+		}
+end
+
+//HN11042017 REDMINE 1788 Update Underwriter Minimum Premium.
+//TB09102017 REDMINE 2139 Europa AP - New rebroke & insurer discount.
+//TB03112017 REDMINE 2327 Europa Underwriting - Minimum Premiums - MCD/Ridersure.
+rule "rebroke concession"
+salience 4900
+activation-group "rebroke concession"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	Policy (rtpType == RTPType.A)
+	Bike ( $riskCover : cover)
+	$faultClaimsIn12Months : ArrayList()from collect (Claim( age < 1 && fault == true))
+	$faultClaimsInOver12MonthsButLessThan36Months : ArrayList()from collect (Claim( (age >= 1 && age < 3) && fault == true))
+	$nonFaultClaimsInLast36Months : ArrayList()from collect (Claim( (age < 3) && fault == false))
+	$consIn12Months : ArrayList()from collect (Conviction( age < 1))
+	$consInOver12MonthsButLessThan36Months : ArrayList()from collect (Conviction( age >= 1 && age < 3))
+	$prop : Proposer()
+	BaseRisk ($aff : affinity)
+then
+	int $currentUwPremium = $result.getAlgPremium() - $result.getInsurerDiscount().getValue() + $result.getInsurerLoad().getValue();
+	int $discountPercentage = 10, $minPrem = 6900, $rebrokeDiscountAmount = 0, $rebrokeLoadAmount = 0;
+	String $areaRating = $result.getAreaGroup().trim(), $finalRef = "MCDR";
+
+	//Subject to meeting selected criteria, increased discounts are available
+	if ($prop.getAge() >= 21 && ($areaRating.trim().toUpperCase().equals("AA") || $areaRating.trim().toUpperCase().equals("A") || $areaRating.trim().toUpperCase().equals("B") || $areaRating.trim().toUpperCase().equals("C")))
+		{
+			if ($faultClaimsIn12Months.size() < 1 && $consIn12Months.size() < 1)
+				{ $discountPercentage = 12;	}
+			
+			if ($faultClaimsIn12Months.size() < 1 && $faultClaimsInOver12MonthsButLessThan36Months.size() < 1 && $nonFaultClaimsInLast36Months.size() < 1 && $consIn12Months.size() < 1 && $consInOver12MonthsButLessThan36Months.size() < 1)
+				{ $discountPercentage = 14;	}
+		}
+
+	//Set minimum premium by cover
+	if ($riskCover.trim().toUpperCase().equals("C"))
+		{	$minPrem = 6900;	}
+	else if ($riskCover.trim().toUpperCase().equals("F"))
+		{	$minPrem = 6400;	}
+	else if ($riskCover.trim().toUpperCase().equals("T"))
+		{	$minPrem = 6400;	}
+
+	//Set insurer reference for Ridersure affinities
+	if ($aff.equals("RIDE") || $aff.equals("SPEC"))
+		{	$finalRef = "RSR";	}
+
+	//Calculate revised uw premium 
+	int $revisedUwPremium = $currentUwPremium - (($currentUwPremium * $discountPercentage) / 100);
+
+	//Check minimum premiums have not been breached
+	if ($revisedUwPremium < $minPrem)
+		{	$revisedUwPremium = $minPrem;	}	
+
+	if ($revisedUwPremium < $result.getAlgPremium())
+		{
+			//calc and apply discount
+			$rebrokeDiscountAmount = $result.getAlgPremium() - $revisedUwPremium;
+			InsurerLoad insLoad = new InsurerLoad();
+			insLoad.setValue(0);
+			$result.setInsurerLoad(insLoad);
+			InsurerDiscount insDis = new InsurerDiscount();
+			insDis.setValue($rebrokeDiscountAmount);			
+			$result.setInsurerDiscount(insDis);
+			insDis.setRef($finalRef);
+			$result.setRulesetChanged(true);
+			logger.info("After Rebroke concession of " + $discountPercentage + "pc, discount allowed of " + $rebrokeDiscountAmount);					
+		}
+	else if ($revisedUwPremium > $result.getAlgPremium())
+		{
+			//calc and apply load
+			$rebrokeLoadAmount = $revisedUwPremium - $result.getAlgPremium();
+			InsurerDiscount insDis = new InsurerDiscount();
+			insDis.setValue(0);
+			$result.setInsurerDiscount(insDis);
+			InsurerLoad insLoad = new InsurerLoad();
+			insLoad.setValue($rebrokeLoadAmount);
+			insLoad.setRef($finalRef);
+			$result.setInsurerLoad(insLoad);
+			$result.setRulesetChanged(true);
+			logger.info("After Rebroke concession of " + $discountPercentage + "pc, load applied of " + $rebrokeLoadAmount);				   	
+		}
+	else if ($revisedUwPremium == $result.getAlgPremium())
+		{
+			//set discount and load to zero
+			InsurerDiscount insDis = new InsurerDiscount();
+			insDis.setValue(0);
+			$result.setInsurerDiscount(insDis);	
+			InsurerLoad insLoad = new InsurerLoad();
+			insLoad.setValue(0);
+			$result.setInsurerLoad(insLoad);
+			$result.setRulesetChanged(true);
+			logger.info("After Rebroke concession of " + $discountPercentage + "pc, discount and load revised to zero.");
+		}
+end
+
+//TB16092019 REDMINE 4029 EUW - AP - Mileage Load.
+rule "mileage loading"
+salience 4800
+activation-group "mileage loadings"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	Policy (rtpType == RTPType.N)
+	Bike ($cov : cover, annualMileage >= 6000)
+	Policy($iDate : inceptionDate)
+then
+	LocalDate $incepDate = new LocalDate($iDate);
+	LocalDate $loadEndDate = new LocalDate("2019-11-01");
+	
+	if ($incepDate.isBefore($loadEndDate))
+		{
+			int $currentUwPremium = $result.getAlgPremium() - $result.getInsurerDiscount().getValue() + $result.getInsurerLoad().getValue();
+			int $loadPercent = 15, $minPremium = 6900;
+			int $revisedUwPremium = $currentUwPremium;
+				
+			//Set minimum premium by cover
+			if ($cov.equals("C"))
+				{	$minPremium = 6900;	}
+			else if ($cov.equals("F"))
+				{	$minPremium = 6400;	}
+			else if ($cov.equals("T"))
+				{	$minPremium = 6400;	}
+				
+			//Calculate revised Uw premium using load percent 
+			$revisedUwPremium = $currentUwPremium + (($currentUwPremium * $loadPercent) / 100);
+				
+			//check revised Uw premium does not breach minimum premiums
+			if ($revisedUwPremium < $minPremium)
+				{	$revisedUwPremium = $minPremium;	}
+			
+			//work out if there is a load or a discount to apply			
+			if ($revisedUwPremium < $result.getAlgPremium())
+				{
+					//calc and apply discount
+					int $discAmount = $result.getAlgPremium() - $revisedUwPremium;
+					InsurerLoad insLoad = new InsurerLoad();
+					insLoad.setValue(0);
+					$result.setInsurerLoad(insLoad);
+					InsurerDiscount insDis = new InsurerDiscount();
+					insDis.setValue($discAmount);			
+					$result.setInsurerDiscount(insDis);
+					insDis.setRef("15MIL");
+					$result.setRulesetChanged(true);
+					logger.info("After Mileage loading, total discount allowed of " + $discAmount);					
+				}
+			else if ($revisedUwPremium > $result.getAlgPremium())
+				{
+					//calc and apply load
+					int $loadAmount = $revisedUwPremium - $result.getAlgPremium();
+					InsurerDiscount insDis = new InsurerDiscount();
+					insDis.setValue(0);
+					$result.setInsurerDiscount(insDis);
+					InsurerLoad insLoad = new InsurerLoad();
+					insLoad.setValue($loadAmount);
+					insLoad.setRef("15MIL");
+					$result.setInsurerLoad(insLoad);
+					$result.setRulesetChanged(true);
+					logger.info("After Mileage loading, total load applied of " + $loadAmount);				   	
+				}
+			else if ($revisedUwPremium == $result.getAlgPremium())
+				{
+					//set discount and load to zero
+					InsurerDiscount insDis = new InsurerDiscount();
+					insDis.setValue(0);
+					$result.setInsurerDiscount(insDis);	
+					InsurerLoad insLoad = new InsurerLoad();
+					insLoad.setValue(0);
+					$result.setInsurerLoad(insLoad);
+					$result.setRulesetChanged(true);
+					logger.info("After Mileage loading, discount and load revised to zero.");
+				}
+		}	
+end
+
+//TB09102017 REDMINE 2139 Europa AP - New rebroke & insurer discount.
+//TB03112017 REDMINE 2327 Europa Underwriting - Minimum Premiums - MCD/Ridersure.
+rule "apply renewal and rebroke concession"
+salience 4700
+activation-group "apply renewal and rebroke concession"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	Policy (rtpType != RTPType.N)
+	PolicyExtras ($holdingInsCoCode : companyCode)
+	BaseRisk ($aff : affinity)
+	Bike ( $riskCover : cover)
+then
+	if ($holdingInsCoCode.equals("EE"))
+		{
+			int $currentUwPremium = $result.getAlgPremium() - $result.getInsurerDiscount().getValue() + $result.getInsurerLoad().getValue();
+			int $minimumPremium = 6900;
+			int $revisedUwPremium = $currentUwPremium - (($currentUwPremium * 5) / 100);
+			
+			//Set insurer reference for Ridersure affinities
+			String $finalRef = "MCDI";
+		
+			if ($aff.equals("RIDE") || $aff.equals("SPEC"))
+				{	$finalRef = "RSI";	}
+				
+			//Set minimum premium by cover
+			if ($riskCover.trim().toUpperCase().equals("C"))
+				{	$minimumPremium = 6900;	}
+			else if ($riskCover.trim().toUpperCase().equals("F"))
+				{	$minimumPremium = 6400;	}
+			else if ($riskCover.trim().toUpperCase().equals("T"))
+				{	$minimumPremium = 6400;	}
+			
+			//Check minimum premiums have not been breached
+			if ($revisedUwPremium < $minimumPremium)
+				{	$revisedUwPremium = $minimumPremium;	}
+
+			if ($revisedUwPremium < $result.getAlgPremium())
+				{
+					//calc and apply discount
+					int $discountAmount = $result.getAlgPremium() - $revisedUwPremium;
+					InsurerLoad insLoad = new InsurerLoad();
+					insLoad.setValue(0);
+					$result.setInsurerLoad(insLoad);
+					InsurerDiscount insDis = new InsurerDiscount();
+					insDis.setValue($discountAmount);			
+					$result.setInsurerDiscount(insDis);
+					insDis.setRef($finalRef);
+					$result.setRulesetChanged(true);
+					logger.info("After Renewal and Rebroke concession, discount allowed of " + $discountAmount);					
+				}
+			else if ($revisedUwPremium > $result.getAlgPremium())
+				{
+					//calc and apply load
+					int $loadAmount = $revisedUwPremium - $result.getAlgPremium();
+					InsurerDiscount insDis = new InsurerDiscount();
+					insDis.setValue(0);
+					$result.setInsurerDiscount(insDis);
+					InsurerLoad insLoad = new InsurerLoad();
+					insLoad.setValue($loadAmount);
+					insLoad.setRef($finalRef);
+					$result.setInsurerLoad(insLoad);
+					$result.setRulesetChanged(true);
+					logger.info("After Renewal and Rebroke concession, load applied of " + $loadAmount);				   	
+				}
+			else if ($revisedUwPremium == $result.getAlgPremium())
+				{
+					//set discount and load to zero
+					InsurerDiscount insDis = new InsurerDiscount();
+					insDis.setValue(0);
+					$result.setInsurerDiscount(insDis);	
+					InsurerLoad insLoad = new InsurerLoad();
+					insLoad.setValue(0);
+					$result.setInsurerLoad(insLoad);
+					$result.setRulesetChanged(true);
+					logger.info("After Renewal and Rebroke concession, discount and load revised to zero.");
+				}
+		}
+end
+
+//TB07052019 REDMINE 3665 EUW - Licence - AP 4% load Provisional 2% discount full licence UK licences NB only.
+rule "licence rule"
+salience 4600
+activation-group "licence rule"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	Policy (rtpType == RTPType.N, $iDate : inceptionDate)
+	BaseRisk( affinity != "RIDE" && affinity != "SPEC" && affinity != "RTAR" && affinity !="CLAS")
+	Bike ($riskCover : cover)
+	$prop : Proposer()
+then
+	LocalDate $incepDate = new LocalDate($iDate);
+	LocalDate $ruleEndDate = new LocalDate("2019-07-01");
+	
+	if ($incepDate.isBefore($ruleEndDate))
+		{
+			int $currentUwPremium = $result.getAlgPremium() - $result.getInsurerDiscount().getValue() + $result.getInsurerLoad().getValue();
+			int $discountAmount= 0, $loadAmount = 0, $minimumPremium = 6900, $adjuster = 0;
+			
+			if ($prop.getBikeLicence().getType().equals("F"))
+				{	$adjuster = -2;	}
+			else if ($prop.getBikeLicence().getType().equals("P"))
+				{	$adjuster = 4;	}
+			
+			if ( $adjuster != 0 )
+				{
+					int $revisedUwPremium = $currentUwPremium + (($currentUwPremium * $adjuster) / 100);
+						
+					//Set minimum premium by cover
+					if ($riskCover.equals("C"))
+						{	$minimumPremium = 6900;	}
+					else if ($riskCover.equals("F"))
+						{	$minimumPremium = 6400;	}
+					else if ($riskCover.equals("T"))
+						{	$minimumPremium = 6400;	}
+						
+					//Check minimums not breached
+					if ($revisedUwPremium < $minimumPremium)
+						{	$revisedUwPremium = $minimumPremium;	}
+									
+					if ($revisedUwPremium < $result.getAlgPremium())
+						{
+							//calc and allow discount and set load to zero
+							$discountAmount = $result.getAlgPremium() - $revisedUwPremium;
+							InsurerLoad insLoad = new InsurerLoad();
+							insLoad.setValue(0);			
+							$result.setInsurerLoad(insLoad);
+							InsurerDiscount insDis = new InsurerDiscount();
+							insDis.setValue($discountAmount);			
+							$result.setInsurerDiscount(insDis);
+							insDis.setRef("LIC");
+							$result.setRulesetChanged(true);
+							logger.info("After Licence rule, revised discount allowed of  " + $discountAmount);
+						}
+					else if ($revisedUwPremium > $result.getAlgPremium())
+						{
+							//calc and apply load and set discount to zero
+							$loadAmount = $revisedUwPremium - $result.getAlgPremium();
+							InsurerDiscount insDis = new InsurerDiscount();
+							insDis.setValue(0);			
+							$result.setInsurerDiscount(insDis);
+							InsurerLoad insLoad = new InsurerLoad();
+							insLoad.setValue($loadAmount);			
+							$result.setInsurerLoad(insLoad);
+							insLoad.setRef("LIC");
+							$result.setRulesetChanged(true);
+							logger.info("After Licence rule, revised load applied of  " + $loadAmount);
+						}
+					else if ($revisedUwPremium == $result.getAlgPremium())
+						{
+							//set load and discount to zero
+							InsurerDiscount insDis = new InsurerDiscount();
+							insDis.setValue(0);			
+							$result.setInsurerDiscount(insDis);
+							InsurerLoad insLoad = new InsurerLoad();
+							insLoad.setValue(0);			
+							$result.setInsurerLoad(insLoad);
+							$result.setRulesetChanged(true);
+							logger.info("After Licence rule, no discount or load allowed" );
+						}	
+				}
+		}	
+end
+
+//HN11042017 REDMINE 1788 Update Underwriter Minimum Premium.
+//TB03112017 REDMINE 2327 Europa Underwriting - Minimum Premiums - MCD/Ridersure.
+rule "apply maximum concession cap"
+salience 4500
+activation-group "apply maximum concession cap"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	Bike ($cov : cover)
+then
+	int $currentAlg = $result.getAlgPremium() - $result.getInsurerDiscount().getValue() + $result.getInsurerLoad().getValue();
+	int $cappedAlg = $result.getAlgPremium() - (($result.getAlgPremium() * 20) / 100);
+	int $discountAmount = 0;
+	int $loadAmount = 0;
+	int $minPremium = 6900;
+	int $revisedDiscount = 0;
+	
+	//Set minimum premium by cover
+	if ($cov.equals("C"))
+		{	$minPremium = 6900;	}
+	else if ($cov.equals("F"))
+		{	$minPremium = 6400;	}
+	else if ($cov.equals("T"))
+		{	$minPremium = 6400;	}
+
+	if ($result.getInsurerDiscount().getValue() > 0 && ($currentAlg < $cappedAlg))
+		{
+			$currentAlg = $cappedAlg;
+
+			//check if revised alg post rtp concessions and capped alg check breaches minimum premium
+			if ($currentAlg < $minPremium)
+				{ $currentAlg = $minPremium;	}
+
+			if ( $currentAlg  < $result.getAlgPremium())
+				{
+					$discountAmount = $result.getAlgPremium() - $currentAlg  ;
+					InsurerLoad insLoad = new InsurerLoad();
+					insLoad.setValue(0);
+					$result.setInsurerLoad(insLoad);
+					InsurerDiscount insDis = new InsurerDiscount();
+					insDis.setValue($discountAmount);
+					$result.setInsurerDiscount(insDis);
+					$result.setRulesetChanged(true);
+					logger.info("After concessions cap, revised discount allowed of " + $discountAmount);
+				}
+			else if ( $currentAlg > $result.getAlgPremium())
+				{
+					$loadAmount = $currentAlg- $result.getAlgPremium();
+					InsurerLoad insLoad = new InsurerLoad();
+					insLoad.setValue($loadAmount);
+					$result.setInsurerLoad(insLoad);
+					$result.setRulesetChanged(true);
+					logger.info("After concessions cap, revised load applied of  " + $loadAmount);
+				}
+			else if ( $currentAlg == $result.getAlgPremium())
+				{
+					InsurerDiscount insDis = new InsurerDiscount();
+					insDis.setValue(0);
+					$result.setInsurerDiscount(insDis);
+					InsurerLoad insLoad = new InsurerLoad();
+					insLoad.setValue(0);
+					$result.setInsurerLoad(insLoad);
+					$result.setRulesetChanged(true);
+					logger.info("After concessions cap, no load or discount allowed");
+				}
+		}	
+end
+
+rule "allow experience concession"
+salience 4400
+activation-group "allow experience concession"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	Policy (rtpType == RTPType.N, $iDate : inceptionDate)
+	$duqs  : ArrayList()from collect (Duq())
+	MotorVehicle ($purchaseDate : purchased)
+	ArrayList(size < 1) from collect (Claim(age < 1 && fault == true))
+	Risk ( yearsNCB > 0)
+	$prop : Proposer()
+	Bike($motorcycleCc : CC)
+then
+	if($prop.getBikeLicence().getType().equals("F") && $prop.getBikeLicence().getAge() >= 3)
+		{
+			int $currentUwPremium = $result.getAlgPremium() - $result.getInsurerDiscount().getValue() + $result.getInsurerLoad().getValue();
+			int $discountAmount= 0, $loadAmount = 0, $minimumPremium = 20000, $previousCc = 0;
+			int $daysOwnedDiff = (Days.daysBetween((ReadableInstant)$purchaseDate,(ReadableInstant)$iDate).getDays());
+			int $revisedUwPremium = $currentUwPremium - (($currentUwPremium * 20) / 100);
+			
+			if ($daysOwnedDiff < 365 && $currentUwPremium > 20000)
+				{
+						//Extract value for largest previously ridden cc
+						for(Duq $field : (ArrayList<Duq>)$duqs)
+							{
+								if ($field.getNumber() == 150)
+									{	
+										try
+											{	$previousCc = Integer.parseInt($field.getValue());	}
+										catch (NumberFormatException nfe)
+											{	
+												logger.info ("Largest previous CC value entered is not a number");	
+												$previousCc = $motorcycleCc - 100;
+											} // try / catch
+									}
+							} // for
+						
+						if (($motorcycleCc <= $previousCc))
+							{
+								if ($revisedUwPremium < $minimumPremium)
+									{	$revisedUwPremium = $minimumPremium;	}
+									
+								if ($revisedUwPremium < $result.getAlgPremium())
+									{
+										//calc and allow discount and set load to zero
+										$discountAmount = $result.getAlgPremium() - $revisedUwPremium;
+										InsurerLoad insLoad = new InsurerLoad();
+										insLoad.setValue(0);			
+										$result.setInsurerLoad(insLoad);
+										InsurerDiscount insDis = new InsurerDiscount();
+										insDis.setValue($discountAmount);			
+										$result.setInsurerDiscount(insDis);
+										insDis.setRef("CC2017");
+										$result.setRulesetChanged(true);
+										logger.info("After experience concession, revised discount allowed of  " + $discountAmount);
+									}
+								else if ($revisedUwPremium > $result.getAlgPremium())
+									{
+										//calc and apply load and set discount to zero
+										$loadAmount = $revisedUwPremium - $result.getAlgPremium();
+										InsurerDiscount insDis = new InsurerDiscount();
+										insDis.setValue(0);			
+										$result.setInsurerDiscount(insDis);
+										InsurerLoad insLoad = new InsurerLoad();
+										insLoad.setValue($loadAmount);			
+										$result.setInsurerLoad(insLoad);
+										insLoad.setRef("CC2017");
+										$result.setRulesetChanged(true);
+										logger.info("After experience concession, revised load applied of  " + $loadAmount);
+									}
+								else if ($revisedUwPremium == $result.getAlgPremium())
+									{
+										//set load and discount to zero
+										InsurerDiscount insDis = new InsurerDiscount();
+										insDis.setValue(0);			
+										$result.setInsurerDiscount(insDis);
+										InsurerLoad insLoad = new InsurerLoad();
+										insLoad.setValue(0);			
+										$result.setInsurerLoad(insLoad);
+										$result.setRulesetChanged(true);
+										logger.info("After experience concession, no discount or load allowed" );
+									}	
+							}
+				}
+		}
+end
+
+//TB14032018 REDMINE 2631 AP & AF 2nd bike experience/cc concession.
+rule "second bike experience concession"
+salience 4300
+activation-group "second bike experience concession"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))	
+	Policy (rtpType == RTPType.N)
+	Bike ( value <= 6500, $motorcycleCc : CC, $riskCover : cover)
+	Risk ( yearsNCB == 0)
+	$prop : Proposer()
+	Proposer($propClaims : claims)
+	ArrayList(size == 0) from collect (Claim(age < 3 && fault == true) from $propClaims)
+	$duqs  : ArrayList()from collect (Duq())
+then
+	if ($prop.getBikeLicence().getType().equals("F") && $prop.getBikeLicence().getAge() >= 2)
+		{
+			int $previousCc = 0, $otherMotorcycleNcb = 0;
+			
+			//Extract value for largest previously ridden cc
+			for(Duq $field : (ArrayList<Duq>)$duqs)
+				{
+					if ($field.getNumber() == 150)
+						{	
+							try
+								{	$previousCc = Integer.parseInt($field.getValue());	}
+							catch (NumberFormatException nfe)
+								{	
+									logger.info ("Largest previous CC value entered is not a number");	
+									$previousCc = $motorcycleCc - 100;
+								}
+						}
+						
+					if ($field.getNumber() == 200)
+						{	
+							try
+								{	$otherMotorcycleNcb = Integer.parseInt($field.getValue());	}
+							catch (NumberFormatException nfe)
+								{	
+									logger.info ("Largest previous CC value entered is not a number");	
+									$otherMotorcycleNcb = 0;
+								}
+						}	
+				}
+				
+			if ( $otherMotorcycleNcb < 0)
+				{	$otherMotorcycleNcb = 0;	}
+			else if ( $otherMotorcycleNcb > 9)
+				{	$otherMotorcycleNcb = 9;	}
+			
+			if ( ($motorcycleCc <= $previousCc) && $otherMotorcycleNcb >= 2)
+				{
+					int $discountPercentage = 0;
+					
+					if ($riskCover.trim().toUpperCase().equals("C"))
+						{	$discountPercentage = (Integer)compSecondBikeDiscounts.get($otherMotorcycleNcb); 	}
+					else if ($riskCover.trim().toUpperCase().equals("F"))
+						{	$discountPercentage = (Integer)tpftSecondBikeDiscounts.get($otherMotorcycleNcb); 	}
+					else if ($riskCover.trim().toUpperCase().equals("T"))
+						{	$discountPercentage = (Integer)tpoSecondBikeDiscounts.get($otherMotorcycleNcb); 	}
+						
+					if ($discountPercentage > 0)
+						{
+							int $currentUwPremium = $result.getAlgPremium() - $result.getInsurerDiscount().getValue() + $result.getInsurerLoad().getValue();
+							int $discountAmount= 0, $loadAmount = 0, $minPremium = 6900, $revisedUwPremium = $currentUwPremium; 
+						
+							//Set minimum premiums and check if after discount alg is breached
+							if ($riskCover.equals("C"))
+								{	$minPremium= 6900;	}
+							else if ($riskCover.equals("F"))
+								{	$minPremium= 6400;	}
+							else if($riskCover.equals("T"))
+								{	$minPremium = 6400;	}
+	
+							//Calculate new revised uw premium
+							$revisedUwPremium = $currentUwPremium - (($currentUwPremium * $discountPercentage) / 1000);
+							
+							//Check minimums not breached
+							if ($revisedUwPremium < $minPremium)
+								{	$revisedUwPremium = $minPremium;	}
+									
+							if ($revisedUwPremium < $result.getAlgPremium())
+								{
+									//calc and allow discount and set load to zero
+									$discountAmount = $result.getAlgPremium() - $revisedUwPremium;
+									InsurerLoad insLoad = new InsurerLoad();
+									insLoad.setValue(0);			
+									$result.setInsurerLoad(insLoad);
+									InsurerDiscount insDis = new InsurerDiscount();
+									insDis.setValue($discountAmount);			
+									$result.setInsurerDiscount(insDis);
+									insDis.setRef("DUQM");
+									$result.setRulesetChanged(true);
+									logger.info("After 2nd Motorcycle concession, revised discount allowed of  " + $discountAmount);
+								}
+							else if ($revisedUwPremium > $result.getAlgPremium())
+								{
+									//calc and apply load and set discount to zero
+									$loadAmount = $revisedUwPremium - $result.getAlgPremium();
+									InsurerDiscount insDis = new InsurerDiscount();
+									insDis.setValue(0);			
+									$result.setInsurerDiscount(insDis);
+									InsurerLoad insLoad = new InsurerLoad();
+									insLoad.setValue($loadAmount);			
+									$result.setInsurerLoad(insLoad);
+									insLoad.setRef("DUQM");
+									$result.setRulesetChanged(true);
+									logger.info("After 2nd Motorcycle concession, revised load applied of  " + $loadAmount);
+								}
+							else if ($revisedUwPremium == $result.getAlgPremium())
+								{
+									//set load and discount to zero
+									InsurerDiscount insDis = new InsurerDiscount();
+									insDis.setValue(0);			
+									$result.setInsurerDiscount(insDis);
+									InsurerLoad insLoad = new InsurerLoad();
+									insLoad.setValue(0);			
+									$result.setInsurerLoad(insLoad);
+									$result.setRulesetChanged(true);
+									logger.info("After 2nd Motorcycle concession, no discount or load allowed" );
+								}
+						}
+				}
+		}
+end
+
+//TB29082017 REDMINE 2130 A Plan - Capping Rules - Europa Underwriting via Ridersure.
+//TB03112017 REDMINE 2327 Europa Underwriting - Minimum Premiums - MCD/Ridersure.
+rule "aplan price match rule"
+salience 4200
+activation-group "aplan price match rule"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	BaseRisk(affinity == "RIDE" || affinity == "SPEC", $subAgent : subAgent)
+	$users : ArrayList() from collect (Userfield ())
+	ArrayList(size < 1) from collect (Claim(age < 1 && fault == true))
+	ArrayList(size < 1) from collect (Conviction(age < 1))
+	Bike ( $riskCover : cover)
+	MotorVehicle (value < 5000, $bikeStored : whereKept )
+	Risk ( yearsNCB > 1)
+	Proposer (age >= 41)
+	$lowestResult : Result(position == 1)
+then
+	boolean $subAgentResponse = false, $internetReferrerResponse = false;
+	String $areaRating = $result.getAreaGroup();
+	String $aggCode = "NONE";
+
+	for(Userfield $field : (ArrayList<Userfield>)$users)
+		{
+			if($field.getLine() == 1 && $field.getType().equals("C") && $field.getValue().trim() != null)
+				{	$aggCode =  $field.getValue().trim().toUpperCase();	}
+		}
+
+	//if sub agent has been entered, check if it is listed as an A Plan branch entitled to the price match rule 
+	if ($subAgent != null && !$subAgent.equals(""))
+		{	
+			try
+				{	$subAgentResponse = aplanBranches.lookupValue(CsvHelper.createKey($subAgent));	}
+			catch (NullPointerException e)
+				{	$subAgentResponse = false;	}
+		}
+
+	//if internet referrer code has been entered, check if it is listed as an A Plan branch entitled to the price match rule 
+	if ($aggCode != null && !$aggCode.equals(""))
+		{	
+			try
+				{	$internetReferrerResponse = aplanBranches.lookupValue(CsvHelper.createKey($aggCode));	}
+			catch (NullPointerException e)
+				{	$internetReferrerResponse = false;	}
+		}
+
+	if ( ($subAgentResponse || $internetReferrerResponse) && $bikeStored.equals("G") && ($areaRating.trim().toUpperCase().equals("AA") || $areaRating.trim().toUpperCase().equals("A") || $areaRating.trim().toUpperCase().equals("B") || $areaRating.trim().toUpperCase().equals("C") ||$areaRating.trim().toUpperCase().equals("D")))
+		{
+			int $currentUwPremium = $result.getAlgPremium() - $result.getInsurerDiscount().getValue() + $result.getInsurerLoad().getValue();
+			
+			int $minimumPremium = 6900;
+			
+			//Set minimum premium by cover
+			if ($riskCover.equals("C"))
+				{	$minimumPremium = 6900;	}
+			else if ($riskCover.equals("F"))
+				{	$minimumPremium = 6400;	}
+			else if ($riskCover.equals("T"))
+				{	$minimumPremium = 6400;	}
+			
+			if ( (!$lowestResult.getSchemeCode().equals("AF") && !$lowestResult.getSchemeCode().equals("AP")) && ($lowestResult.getAlgPremium() < $currentUwPremium))
+				{
+					//Take 1% off position 1 alg premium
+					int $revisedAlg = $lowestResult.getAlgPremium() - (($lowestResult.getAlgPremium() * 1) / 100);
+					
+					//Check new alg is not below minimum premium, if it is set it to minimum premium
+					if ($revisedAlg < $minimumPremium)
+						{	$revisedAlg = $minimumPremium;	}
+					
+					if ($revisedAlg < $currentUwPremium)
+						{				
+							int $discountAmount = $result.getAlgPremium() - $revisedAlg;
+							
+							InsurerLoad insLoad = new InsurerLoad();
+							insLoad.setValue(0);
+							$result.setInsurerLoad(insLoad);
+							InsurerDiscount insDis = new InsurerDiscount();
+							insDis.setValue($discountAmount);
+							insDis.setRef("CAPI");
+							$result.setInsurerDiscount(insDis);
+					     	$result.setRulesetChanged(true);
+							logger.info ("APlan Cap Top Panel Rate, discount allowed of #" + $discountAmount);
+						}
+				}
+		} 
+end
+
+//TB21082019 REDMINE 3976 EUW - AP - Loads ahead of rate release.
+rule "insurer loadings until nov2019"
+salience 4100
+activation-group "insurer loadings until nov2019"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	Policy (rtpType == RTPType.N)
+	BaseRisk( affinity != "RIDE" && affinity != "SPEC" && affinity != "RTAR" && affinity !="CLAS")
+	Bike ($cov : cover, $bikeMileage : annualMileage)
+	Policy($iDate : inceptionDate)
+	Proposer ( $proposerAge : age)
+then
+	LocalDate $incepDate = new LocalDate($iDate);
+	LocalDate $loadEndDate = new LocalDate("2019-11-01");
+
+	if ($incepDate.isBefore($loadEndDate))
+		{
+			int $currentUwPremium = $result.getAlgPremium() - $result.getInsurerDiscount().getValue() + $result.getInsurerLoad().getValue();
+			int $loadPercent = 0, $minPremium = 6900;
+			int $revisedUwPremium = $currentUwPremium;
+			
+			if ($proposerAge >= 25 && $proposerAge <= 29)
+				{	$loadPercent = $loadPercent + 5;	}	
+				
+			if ($result.getAreaGroup().equals("C") || $result.getAreaGroup().equals("D") || $result.getAreaGroup().equals("E"))
+				{	$loadPercent = $loadPercent + 2;	}
+			
+			if ($bikeMileage >= 5000)
+				{	$loadPercent = $loadPercent + 5;	}
+			
+			//Set minimum premium by cover
+			if ($cov.equals("C"))
+				{	$minPremium = 6900;	}
+			else if ($cov.equals("F"))
+				{	$minPremium = 6400;	}
+			else if ($cov.equals("T"))
+				{	$minPremium = 6400;	}
+			
+			if ($loadPercent > 0)
+				{	
+					//Calculate revised Uw premium using load percent 
+					$revisedUwPremium = $currentUwPremium + (($currentUwPremium * $loadPercent) / 100);
+						
+					//check revised Uw premium does not breach minimum premiums
+					if ($revisedUwPremium < $minPremium)
+						{	$revisedUwPremium = $minPremium;	}
+						
+					//work out if there is a load or a discount to apply			
+					if ($revisedUwPremium < $result.getAlgPremium())
+						{
+							//calc and apply discount
+							int $discAmount = $result.getAlgPremium() - $revisedUwPremium;
+							InsurerLoad insLoad = new InsurerLoad();
+							insLoad.setValue(0);
+							$result.setInsurerLoad(insLoad);
+							InsurerDiscount insDis = new InsurerDiscount();
+							insDis.setValue($discAmount);			
+							$result.setInsurerDiscount(insDis);
+							insDis.setRef("NOV19");
+							$result.setRulesetChanged(true);
+							logger.info("After Insurer loadings, total discount allowed of " + $discAmount);					
+						}
+					else if ($revisedUwPremium > $result.getAlgPremium())
+						{
+							//calc and apply load
+							int $loadAmount = $revisedUwPremium - $result.getAlgPremium();
+							InsurerDiscount insDis = new InsurerDiscount();
+							insDis.setValue(0);
+							$result.setInsurerDiscount(insDis);
+							InsurerLoad insLoad = new InsurerLoad();
+							insLoad.setValue($loadAmount);
+							insLoad.setRef("NOV19");
+							$result.setInsurerLoad(insLoad);
+							$result.setRulesetChanged(true);
+							logger.info("After Insurer loadings, total load applied of " + $loadAmount);				   	
+						}
+					else if ($revisedUwPremium == $result.getAlgPremium())
+						{
+							//set discount and load to zero
+							InsurerDiscount insDis = new InsurerDiscount();
+							insDis.setValue(0);
+							$result.setInsurerDiscount(insDis);	
+							InsurerLoad insLoad = new InsurerLoad();
+							insLoad.setValue(0);
+							$result.setInsurerLoad(insLoad);
+							$result.setRulesetChanged(true);
+							logger.info("After Insurer loadings, discount and load revised to zero.");
+						}
+				}
+		}	
+end
+
+rule "decline jersey and guernsey postcodes"
+salience 4000
+activation-group "decline jersey and guernsey postcodes"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	$baseR : BaseRisk()
+then
+	String postCodeBeginning = $baseR.getPostCode().substring(0,2);
+
+	if (postCodeBeginning.equals("JE") || postCodeBeginning.equals("GY"))
+		{
+			InsurerDiscount insDis = new InsurerDiscount();
+			insDis.setValue(0);
+			$result.setInsurerDiscount(insDis);
+			InsurerLoad insLoad = new InsurerLoad();
+			insLoad.setValue(0);
+			$result.setInsurerLoad(insLoad);
+			$result.setAlgPremium(2500000);
+			$result.setRulesetChanged(true);
+			logger.info ("JE or GY postcode. Load applied of [25000.00");
+		}
+end
+
+//HN11042017 REDMINE 1814 Dual Garaging Decline.
+rule "increase alg for differing postcodes"
+salience 3900
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	$base: BaseRisk()
+	Bike ($keptPostcode : keptPostCode)
+then
+	String $riskPostcode = $base.getPostCode().trim().toUpperCase();
+
+	if ($keptPostcode != null && (!$keptPostcode.equals($riskPostcode)))
+		{
+			InsurerDiscount insDis = new InsurerDiscount();
+			insDis.setValue(0);
+			$result.setInsurerDiscount(insDis);
+			InsurerLoad insLoad = new InsurerLoad();
+			insLoad.setValue(2500000);
+			$result.setInsurerLoad(insLoad);
+			$result.setRulesetChanged(true);
+			logger.info ("Kept postcode differs from risk postcode. Load applied of [25000.00");
+		}
+end
+
+rule "Apply Ridersure etc commissions"
+salience 3800
+activation-group "Apply Ridersure etc commissions"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	$applicableAffinities : BaseRisk(eval(ridersureAffinityCode.contains(affinity)))
+then
+	int disAmount, newTotPremium = $result.getAlgPremium() - $result.getInsurerDiscount().getValue() + $result.getInsurerLoad().getValue();
+
+	disAmount = (newTotPremium * 25) /100;
+	$result.setBrokerAdjustment(disAmount);
+    $result.setRulesetChanged(true);
+    logger.info($result.getSchemeCode() + " Set commission to #"+ disAmount);
+end
+
+rule "Apply new affinity commission amendments using spreadsheet values"
+salience 3700
+activation-group "Apply new affinity commission amendments using spreadsheet values"
+no-loop true
+when
+    $result : Result(eval(schemes.contains(schemeCode)))
+    $duqs  : ArrayList()from collect (Duq())
+    BaseRisk(affinity != "RIDE" && affinity != "SPEC", $aff : affinity)
+    Risk ($ncbLevel : yearsNCB)
+    Proposer ($propAge : age)
+    Policy( rtpType == RTPType.N)
+then 
+	//Declare variables         
+	boolean $affinityFound = true;
+	double excelAmount = 0.0;
+	int affinityAdjustment = 0, discountCommAmount = 0; 
+	int $uwPrem = $result.getAlgPremium() - $result.getInsurerDiscount().getValue() + $result.getInsurerLoad().getValue();
+	String $ddDuq = "";
+	String $proposerAgeLevel = "AGE19";
+	
+	//set proposer age band
+	if ($propAge > 19)
+		{	$proposerAgeLevel = "AGE20";	}
+	
+	//Check if affinity exists within the spreadsheet
+	try
+		{
+			Object o = EUROPA_COMM_MC.getValue( "1.1_RTP_U_duq_N_nil_ncb", "Affinity", String.class, "Affinity", $aff.trim().toUpperCase());
+			Object p = EUROPA_COMM_MC.getValue( "1.1_RTP_U_duq_Y_nil_ncb", "Affinity", String.class, "Affinity", $aff.trim().toUpperCase());
+			Object r = EUROPA_COMM_MC.getValue( "1.1_RTP_U_duq_N_with_ncb", "Affinity", String.class, "Affinity", $aff.trim().toUpperCase());
+			Object s = EUROPA_COMM_MC.getValue( "1.1_RTP_U_duq_Y_with_ncb", "Affinity", String.class, "Affinity", $aff.trim().toUpperCase());
+	
+			if(o.toString().equals("0.0") || p.toString().equals("0.0") || r.toString().equals("0.0") || s.toString().equals("0.0"))
+				{ 
+					logger.info ("object o or p or object r or object s is 0.0. No commission change.");
+					$affinityFound = false;	
+				}
+		}
+	catch (NullPointerException e)
+		{
+			logger.info ("Affinity not found. No commission change.");
+			$affinityFound = false;
+		}
+
+	//If affinity exists, extract value from spreadsheet using affinity, proposer's age, ncb level, premium and DD duq 
+	if($affinityFound)
+		{
+			for(Duq $field : (ArrayList<Duq>)$duqs)
+				{	
+					if($field.getNumber() == 173 && $field.getValue().equals("Y"))
+						{	
+							if ($ncbLevel == 0)
+								{	excelAmount = (EUROPA_COMM_MC.getValue("1.1_RTP_U_duq_Y_nil_ncb","Commission", double.class, "Proposer Age", $proposerAgeLevel, "Affinity", $aff, "Premium", $uwPrem, true));	}
+							else if ($ncbLevel > 0 )
+								{	excelAmount = (EUROPA_COMM_MC.getValue("1.1_RTP_U_duq_Y_with_ncb","Commission", double.class, "Proposer Age", $proposerAgeLevel, "Affinity", $aff, "Premium", $uwPrem, true));	}
+								
+							$ddDuq = "Yes";
+						}
+					else if($field.getNumber() == 173 && $field.getValue().equals("N"))
+						{	
+							if ($ncbLevel == 0)
+								{	excelAmount = (EUROPA_COMM_MC.getValue("1.1_RTP_U_duq_N_nil_ncb","Commission", double.class, "Proposer Age", $proposerAgeLevel, "Affinity", $aff, "Premium", $uwPrem, true));	}
+							else if ($ncbLevel > 0 )
+								{	excelAmount = (EUROPA_COMM_MC.getValue("1.1_RTP_U_duq_N_with_ncb","Commission", double.class, "Proposer Age", $proposerAgeLevel, "Affinity", $aff, "Premium", $uwPrem, true));	}           
+								$ddDuq = "No";
+						}
+				}
+            
+            //Set commission to value extract from spreadsheet
+			Number DdiscountCommAmount = 0.0;
+			DdiscountCommAmount = ((double)excelAmount);
+			discountCommAmount = DdiscountCommAmount.intValue();
+
+			if (discountCommAmount != 0)
+				{
+					affinityAdjustment += discountCommAmount;
+					$result.setBrokerAdjustment(affinityAdjustment);
+					$result.setRulesetChanged(true);
+					logger.info ("DD Duq is " + $ddDuq + " and " + $aff.trim().toUpperCase() + ".Commission revised to #" + $result.getBrokerAdjustment());
+				}
+		}          
+end
+
+rule "subagent commission reduction"
+salience 3600
+activation-group "subagent commission reduction"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	BaseRisk(affinity == "MCD", $subAgent : subAgent)
+	Policy( rtpType == RTPType.N)
+then
+	int commAfterDiscount = $result.getBrokerAdjustment() - 1500;
+	
+	if (commAfterDiscount  == 0)
+		{	commAfterDiscount = 10;	}
+	
+	if ($subAgent.trim().toUpperCase().equals("CROS") || $subAgent.trim().toUpperCase().equals("LBIK") || $subAgent.trim().toUpperCase().equals("7018") || $subAgent.trim().toUpperCase().equals("AFFN"))
+		{
+			$result.setBrokerAdjustment(commAfterDiscount);  
+			$result.setRulesetChanged(true);
+			logger.info ($result.getSchemeCode() + " has subagent of " + $subAgent.trim().toUpperCase() + ". Commission updated to " + commAfterDiscount  );
+		}
+end
+
+rule "CC11 Castle Combe commission reduction"
+salience 3500
+activation-group "CC11 Castle Combe commission reduction"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	BaseRisk (affinity == "MCD", $subAgent : subAgent)
+	Policy( rtpType == RTPType.N)
+then
+
+	if ($subAgent.trim().toUpperCase().equals("CC11"))
+		{
+			int updatedComm = $result.getBrokerAdjustment() - 2500;
+			$result.setBrokerAdjustment(updatedComm);
+			$result.setRulesetChanged(true);
+			logger.info ("CC11 sub agent and MCD affinity. Commission updated to " + updatedComm);
+		}
+end
+
+rule "CC14 Castle Combe commission reduction"
+salience 3400
+activation-group "CC14 Castle Combe commission reduction"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	BaseRisk (affinity == "MCD", $subAgent : subAgent)
+	Policy( rtpType == RTPType.N)
+then
+
+	if ($subAgent.trim().toUpperCase().equals("CC14"))
+		{
+			int $updatedComm = $result.getBrokerAdjustment() - 2500;
+			$result.setBrokerAdjustment($updatedComm);
+			$result.setRulesetChanged(true);
+			logger.info ("CC14 sub agent and MCD affinity. Commission updated to " + $updatedComm);
+		}
+end
+
+rule "RAF commission reduction"
+salience 3300
+activation-group "RAF commission reduction"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	BaseRisk (affinity == "MCD", $subAgent : subAgent)
+	Policy( rtpType == RTPType.N)
+then
+
+	if ($subAgent.trim().toUpperCase().equals("RAF"))
+		{
+			int $updatedComm = $result.getBrokerAdjustment() - 2500;
+			$result.setBrokerAdjustment($updatedComm);
+			$result.setRulesetChanged(true);
+			logger.info ("RAF sub agent and MCD affinity. Commission updated to " + $updatedComm);
+		}
+end
+
+rule "Apply new renewal rebroke commission amendments using spreadsheet values"
+salience 3200
+activation-group "Apply new renewal rebroke commission amendments using spreadsheet values"
+no-loop true
+when
+    $result : Result(eval(schemes.contains(schemeCode)))
+    $duqs  : ArrayList()from collect (Duq())
+    BaseRisk(affinity != "RIDE" && affinity != "SPEC", $aff : affinity)
+    Policy( rtpType != RTPType.N)
+then 
+	//Declare variables         
+	boolean $affinityFound = true;
+	double excelAmount = 0.0;
+	int affinityAdjustment = 0, discountCommAmount = 0; 
+	int $uwPrem = $result.getAlgPremium() - $result.getInsurerDiscount().getValue() + $result.getInsurerLoad().getValue();
+	String $ddDuq = "";
+	
+	//Check if affinity exists within the spreadsheet
+	try
+		{
+			Object o = EUROPA_COMM_MC.getValue( "1.1_RTP_Rnwl_duq_N", "Affinity", String.class, "Affinity", $aff.trim().toUpperCase());
+			Object p = EUROPA_COMM_MC.getValue( "1.1_RTP_Rnwl_duq_Y", "Affinity", String.class, "Affinity", $aff.trim().toUpperCase());
+			
+			if(o.toString().equals("0.0") || p.toString().equals("0.0"))
+				{ 
+					logger.info ("object o or p or object is 0.0. No commission change.");
+					$affinityFound = false;	
+				}
+		}
+	catch (NullPointerException e)
+		{
+			logger.info ("Affinity not found. No commission change.");
+			$affinityFound = false;
+		}
+
+	//If affinity exists, extract value from spreadsheet using affinity, premium and DD duq 
+	if($affinityFound)
+		{
+			for(Duq $field : (ArrayList<Duq>)$duqs)
+				{	
+					if($field.getNumber() == 173 && $field.getValue().equals("Y"))
+						{	
+							excelAmount = (EUROPA_COMM_MC.getValue("1.1_RTP_Rnwl_duq_Y","Commission", double.class, "Affinity", $aff, "Premium", $uwPrem, true));
+							$ddDuq = "Yes";
+						}
+					else if($field.getNumber() == 173 && $field.getValue().equals("N"))
+						{	
+							excelAmount = (EUROPA_COMM_MC.getValue("1.1_RTP_Rnwl_duq_N","Commission", double.class, "Affinity", $aff, "Premium", $uwPrem, true));
+							$ddDuq = "No";
+						}
+				}
+            
+            //Set commission to value extract from spreadsheet
+			Number DdiscountCommAmount = 0.0;
+			DdiscountCommAmount = ((double)excelAmount);
+			discountCommAmount = DdiscountCommAmount.intValue();
+
+			if (discountCommAmount != 0)
+				{
+					affinityAdjustment += discountCommAmount;
+					$result.setBrokerAdjustment(affinityAdjustment);
+					$result.setRulesetChanged(true);
+					logger.info ("DD Duq is " + $ddDuq + " and " + $aff.trim().toUpperCase() + ". Rnwl/rebroke Commission revised to #" + $result.getBrokerAdjustment());
+				}
+		}          
+end
+
+rule "BLD commission reduction"
+salience 3100
+activation-group "BLD commission reduction"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	BaseRisk(affinity == "MCD", $subAgent : subAgent)
+then
+	int commAfterDiscount = $result.getBrokerAdjustment() - 4000;
+	if ( commAfterDiscount  == 0)
+		{	commAfterDiscount = -10;	}
+	
+	if ($subAgent.trim().toUpperCase().equals("BLD") || $subAgent.trim().toUpperCase().equals("CAST") || $subAgent.trim().toUpperCase().equals("DAS") )
+		{
+			$result.setBrokerAdjustment(commAfterDiscount);  
+			$result.setRulesetChanged(true);
+			logger.info ($result.getSchemeCode() + " has subagent of " + $subAgent.trim().toUpperCase() + ". Commission updated to " + commAfterDiscount  );
+		}
+end
+
+rule "RAFR commission reduction"
+salience 3000
+activation-group "RAFR commission reduction"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	BaseRisk(affinity != "RIDE" && affinity != "SPEC", $subAgent : subAgent)
+	Policy( rtpType != RTPType.N)
+then
+	if ($subAgent.trim().toUpperCase().equals("RAFR"))
+		{
+			int $updatedComm = $result.getBrokerAdjustment() - 2500;
+			$result.setBrokerAdjustment($updatedComm);
+			$result.setRulesetChanged(true);
+			logger.info ("RAFR sub agent. Commission updated to " + $updatedComm);
+		}
+end
+
+rule "apply ridersure commission increase"
+salience 2900
+activation-group "apply ridersure commission increase"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	BaseRisk(affinity == "RIDE" || affinity == "SPEC")
+	Policy($transType : rtpType)
+then
+	int $commissionIncrease = 0;
+	
+	//Determine increased commission amount by transaction type
+	if ($transType == RTPType.N)
+		{	$commissionIncrease = 1950;	}
+	else if ($transType != RTPType.N)
+		{	$commissionIncrease = 350;	}
+	
+	//if commission increase is not zero apply increased commission
+	if ($commissionIncrease != 0)
+		{
+			$result.setBrokerAdjustment($result.getBrokerAdjustment() + $commissionIncrease);
+			$result.setRulesetChanged(true);
+			logger.info ("Commission has been revised to " + $result.getBrokerAdjustment());
+		}
+end
+
+//TB17062019 REDMINE 3822 Ridersure - Extend commission increase rule for no breakdown cover.
+rule "increase ridersure commission if no uk breakdown"
+salience 2800
+activation-group "increase ridersure commission if no uk breakdown"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	Policy (rtpType != RTPType.N)
+	BaseRisk(affinity == "RIDE" || affinity == "SPEC")
+	$optionalExtrasResult : Result($opexList : optionalExtras)
+then
+	boolean $breakDownIncluded = false;
+	
+	//Check if Breakdown cover applied to policy
+	for(OptionalExtra $opex : (ArrayList<OptionalExtra>)$opexList)
+		{
+			if($opex.getCode().equals("RU") || $opex.getCode().equals("B1"))
+				{	$breakDownIncluded = true;	}
+		}
+		
+	//if breakdown cover not found, increase commission by £16.00	
+	if ($breakDownIncluded == false)
+		{
+			$result.setBrokerAdjustment($result.getBrokerAdjustment() + 1600);
+			$result.setRulesetChanged(true);
+			logger.info ("No UK Breakdown Cover add on. Comm increased to " + $result.getBrokerAdjustment());
+		}
+end
+
+//TB06032018 REDMINE 2635 Add caps to MCD GOLD and Diamond.
+//TB26032018 REDMINE 2675 MCD Gold & Diamond additional Commission correction.
+rule "apply dob mcd total premium cap"
+salience 2700
+activation-group "apply dob mcd total premium cap"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	Policy (rtpType != RTPType.N)
+	PolicyExtras ($rnwlDate : policyRenewalDate, $earliest : policyEarliestInceptionDate)
+	$duqs  : ArrayList()from collect (Duq())
+	Policy($iDate : inceptionDate)
+	$polEx : PolicyExtras()
+	BaseRisk( affinity != "RIDE" && affinity != "SPEC" && affinity != "RTAR", $aff : affinity)
+	Proposer($proposerDOB : dateOfBirth)
+then
+	if ($polEx.getPolicyCommissionRate() != 0 && $polEx.getLastAnnualPremium() > 0)
+		{
+			//Establish Day of birth and set code
+			int $birthDayOfMonth = $proposerDOB.dayOfMonth().get();
+			String $dobCode = "DOB" + $birthDayOfMonth;
+			
+			//Establish intended payment method from DUQ and set code
+			String $paymentCode = "FULL";
+							
+			for(Duq $field : (ArrayList<Duq>)$duqs)
+				{	
+					if($field.getNumber() == 173 && $field.getValue().equals("Y"))
+						{	
+							$paymentCode = "DIRECTDEBIT";
+						}
+					}
+	
+			//Establish tenure period and set code
+			int $yrsTenure = (Years.yearsBetween((ReadableInstant)$earliest,(ReadableInstant)$rnwlDate).getYears());
+			
+			if ($yrsTenure > 9)
+					{	$yrsTenure = 9;	}
+			
+			String $tenureCode = "TEN" + $yrsTenure;
+			
+			double $excelTenurePercentage = 0.0;
+			double $excelMaxCap = 0.0;
+	
+			//Attempt to extract the Tenure Percentage from the excel spreadsheet
+			try
+				{
+					$excelTenurePercentage = (EUROPA_COMM_MC.getValue("1.1_RTP_affinity_cap","Tenure Percentage", double.class, "Payment Method", $paymentCode, "Proposer Day Of Birth", $dobCode, "Affinity",  $aff.trim().toUpperCase(), "Tenure Period", $tenureCode, true));
+					
+					if($excelTenurePercentage  == 0.0)
+						{ 
+							logger.info ("Error Unable to extract Tenure Percentage");
+							$excelTenurePercentage  = 99999.0;	
+						}
+				}
+			catch (Exception e)
+				{
+					logger.info ("Exception Error Unable to extract Tenure Percentage");
+					$excelTenurePercentage  = 99999.0;
+				}
+	
+			//Attempt to extract the Max Cap value from the excel spreadsheet
+			try
+				{
+					$excelMaxCap = (EUROPA_COMM_MC.getValue("1.1_RTP_affinity_cap","Max Cap", double.class, "Payment Method", $paymentCode, "Proposer Day Of Birth", $dobCode, "Affinity",  $aff.trim().toUpperCase(), "Tenure Period", $tenureCode, true));
+				
+					if($excelMaxCap  == 0.0)
+						{ 
+							logger.info ("Error Unable to extract Max Cap Amount");
+							$excelMaxCap  = 99999.0;	
+						}
+				}
+			catch (Exception e)
+				{
+					logger.info ("Exception Error Unable to extract Max Cap Amount");
+					$excelMaxCap  = 99999.0;
+				}
+	
+			//Turn extracted values in to useable values
+			Number DexcelTenurePercentage = 0.0;
+			DexcelTenurePercentage = ((double)$excelTenurePercentage);
+			int $excelTenurePercentageAsInteger = DexcelTenurePercentage.intValue();
+			
+			Number DexcelMaxCap = 0.0;
+			DexcelMaxCap = ((double)$excelMaxCap);
+			int $excelMaxCapAsInteger = DexcelMaxCap.intValue();
+			
+			//Calculate lastYrsTotal for comparrison
+			int $lastYrsTotal = $polEx.getLastAnnualPremium() + $polEx.getBrokerFee();
+			
+			if ($excelTenurePercentageAsInteger != 99999 && $excelMaxCapAsInteger != 99999 )
+				{
+					//Alternative lastYrsTotal calculation for negative commissions
+					if ($polEx.getPolicyCommissionRate() < 0)
+						{
+							//Extract last yrs ipt rate. Set IPT to 9.5% as default.
+							DateTime $rrEffDate = new DateTime(2016,11,1,0,0,0,0);
+							int $rrDaysDiff = (Days.daysBetween((ReadableInstant)$rrEffDate,(ReadableInstant)$iDate).getDays());
+							double $lastYrsIptPerc = 109.5;
+							double $excelIptAmount = 0.0;
+						
+							try
+								{
+									$excelIptAmount = (EUROPA_FORD_IPT.getValue("1.1_RTP_RR_Ipt_levels","Ipt", double.class, "Days Diff", $rrDaysDiff, true));
+													
+									if($excelIptAmount  == 0.0 )
+										{ 
+											logger.info ("Unable to extract IPT value. Default IPT 9.5% used.");
+											$excelIptAmount  = 95.0;	
+										}
+								}
+							catch (NullPointerException e)
+								{
+									logger.info ("NullPointerException Unable to extract IPT value. Default 9.5% used.");
+									$excelIptAmount  = 95.0;
+								}
+										
+							//Set IPT for use in calculcations using excel value
+							$lastYrsIptPerc = 100.00 + ($excelIptAmount / 10);
+							
+							int $lastYearsTotalPremiumExIpt = 0;
+							Number DdiscCommAmount = 0.0;
+							DdiscCommAmount = ((double)($polEx.getLastAnnualPremium() / $lastYrsIptPerc) * 100);
+							$lastYearsTotalPremiumExIpt = DdiscCommAmount.intValue();
+							int $lastYearsCommAmount = ($lastYearsTotalPremiumExIpt *  $polEx.getPolicyCommissionRate()) / 10000;
+							
+							//Recalculate lastYrsTotal
+							$lastYrsTotal = $polEx.getLastAnnualPremium() + $lastYearsCommAmount + $polEx.getBrokerFee(); //Ex commission and IPT
+						}
+					
+					LocalDate $incepDate = new LocalDate($iDate);
+					LocalDate $commLoadEndDate = new LocalDate("2018-08-05");
+					
+					if ($incepDate.isBefore($commLoadEndDate) && $aff.equals("GOLD"))
+						{	$lastYrsTotal = $lastYrsTotal + 2500;	}
+					else if ($incepDate.isBefore($commLoadEndDate) && $aff.equals("GLD2"))
+						{	$lastYrsTotal = $lastYrsTotal + 1300;	}
+					else if ($incepDate.isBefore($commLoadEndDate) && $aff.equals("DIAM"))
+						{	$lastYrsTotal = $lastYrsTotal + 3500;	}
+					
+					int $cappedTotal = (($lastYrsTotal * $excelTenurePercentageAsInteger) / 100);
+					int $commissionAmendment = 0;
+					
+					//Establish IPT rate based on inception date
+					DateTime $startDate = new DateTime($iDate);
+					
+					double $nbIptPerc = 120.00, $nbExcelIptAmount = 0.0;
+					DateTime $nbEffDate = new DateTime(2016,10,1,0,0,0,0);
+					int $nbDaysDiff = (Days.daysBetween((ReadableInstant)$nbEffDate,(ReadableInstant)$iDate).getDays());
+						
+					try
+						{
+							$nbExcelIptAmount = (EUROPA_FORD_IPT.getValue("1.1_RTP_NB_Ipt_levels","Ipt", double.class, "Days Diff", $nbDaysDiff, true));
+											
+							if($nbExcelIptAmount  == 0.0 )
+								{ 
+									logger.info ("Unable to extract IPT value. Default IPT 12% used.");
+									$nbExcelIptAmount  = 120.0;	
+								}
+						}
+					catch (NullPointerException e)
+						{
+							logger.info ("NullPointerException Unable to extract IPT value. Default 12% used.");
+							$nbExcelIptAmount  = 120.0;
+						}
+					
+					//Set IPT for use in calculcations using excel value
+					$nbIptPerc = 100.00 + ($nbExcelIptAmount / 10);
+					
+					//Calculate this years total premium, uw plus commission plus ipt
+					Number DthisYrsTotalPremium = 0.0;
+					int $thisYrsTotalPremium = 0;
+					DthisYrsTotalPremium =  ($result.calcPremium() * ((double)$nbIptPerc)) / 100;
+					$thisYrsTotalPremium = DthisYrsTotalPremium.intValue() + $result.getFee();
+					
+					//Compare last yrs total with this yrs total
+					if ($thisYrsTotalPremium > $cappedTotal)
+						{	
+							$commissionAmendment =  $cappedTotal - $thisYrsTotalPremium;
+						
+							//Check the difference is not greater than max cap limit
+							if ( $commissionAmendment < $excelMaxCapAsInteger)
+								{	$commissionAmendment = $excelMaxCapAsInteger;	}
+							
+							int $currentUwPremium = $result.getAlgPremium() - $result.getInsurerDiscount().getValue() + $result.getInsurerLoad().getValue();
+							int $additionalAmount = ($currentUwPremium * 5) / 1000;
+							int $revisedCommission = ($result.getBrokerAdjustment() + $commissionAmendment) + $additionalAmount;
+							
+							$result.setBrokerAdjustment($revisedCommission);
+							$result.setRulesetChanged(true);
+							logger.info ("Renewal Rebroke Cap - Comm adjusted to #" + $result.getBrokerAdjustment());
+						}
+				}
+		}
+end
+
+//TB03052018 REDMINE 2704 New NCD Collars - Evens days of DOBs only. Also, remove variable fees as NLR.
+//TB25072018 REDMINE 2998 MCD & AA Collar and Cap re-alignment.
+rule "apply dob mcd total premium collar"
+salience 2600
+activation-group "apply dob mcd total premium collar"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	Policy (rtpType != RTPType.N)
+	PolicyExtras ($rnwlDate : policyRenewalDate, $earliest : policyEarliestInceptionDate)
+	$duqs  : ArrayList()from collect (Duq())
+	Policy($iDate : inceptionDate)
+	$polEx : PolicyExtras()
+	BaseRisk( affinity != "RIDE" && affinity != "SPEC" && affinity != "RTAR", $aff : affinity)
+	Proposer($proposerDOB : dateOfBirth)
+then
+	//Establish Day of birth and set code
+	int $birthDayOfMonth = $proposerDOB.dayOfMonth().get();
+	
+	//Only continue if last years commission rate is not Zero and last years annual premium is greater than zero
+	if ($polEx.getPolicyCommissionRate() != 0 && $polEx.getLastAnnualPremium() > 0)
+		{
+			//Establish Day of birth and set code
+			String $dobCode = "DOB" + $birthDayOfMonth;
+			
+			//Establish intended payment method from DUQ and set code
+			String $paymentCode = "FULL";
+							
+			for(Duq $field : (ArrayList<Duq>)$duqs)
+				{	
+					if($field.getNumber() == 173 && $field.getValue().equals("Y"))
+						{	
+							$paymentCode = "DIRECTDEBIT";
+						}
+					}
+	
+			//Establish tenure period and set code
+			int $yrsTenure = (Years.yearsBetween((ReadableInstant)$earliest,(ReadableInstant)$rnwlDate).getYears());
+			
+			if ($yrsTenure > 9)
+					{	$yrsTenure = 9;	}
+			
+			String $tenureCode = "TEN" + $yrsTenure;
+			
+			double $excelTenureCollarPercentage = 0.0;
+
+			//Attempt to extract the Tenure Percentage from the excel spreadsheet
+			try
+				{
+					$excelTenureCollarPercentage = (EUROPA_COMM_MC.getValue("1.1_RTP_affinity_collar","Tenure Collar Percentage", double.class, "Payment Method", $paymentCode, "Proposer Day Of Birth", $dobCode, "Affinity",  $aff.trim().toUpperCase(), "Tenure Period", $tenureCode, true));
+					
+					if($excelTenureCollarPercentage  == 0.0)
+						{ 
+							logger.info ("Error Unable to extract Tenure Collar Percentage");
+							$excelTenureCollarPercentage  = 99999.0;	
+						}
+				}
+			catch (Exception e)
+				{
+					logger.info ("Exception Error Unable to extract Tenure Collar Percentage");
+					$excelTenureCollarPercentage  = 99999.0;
+				}
+	
+			//Turn extracted values in to useable values
+			Number DexcelTenureCollarPercentage = 0.0;
+			DexcelTenureCollarPercentage = ((double)$excelTenureCollarPercentage);
+			int $excelTenureCollarPercentageAsInteger = DexcelTenureCollarPercentage.intValue();
+			
+			//Calculate lastYrsTotal for comparrison
+			int $lastYrsTotal = $polEx.getLastAnnualPremium() + $polEx.getBrokerFee();
+			
+			if ($excelTenureCollarPercentageAsInteger != 99999)
+				{
+					//Alternative lastYrsTotal calculation for negative commissions
+					if ($polEx.getPolicyCommissionRate() < 0)
+						{
+							//Extract last yrs ipt rate. Set IPT to 9.5% as default.
+							DateTime $rrEffDate = new DateTime(2016,11,1,0,0,0,0);
+							int $rrDaysDiff = (Days.daysBetween((ReadableInstant)$rrEffDate,(ReadableInstant)$iDate).getDays());
+							double $lastYrsIptPerc = 109.5;
+							double $excelIptAmount = 0.0;
+						
+							try
+								{
+									$excelIptAmount = (EUROPA_FORD_IPT.getValue("1.1_RTP_RR_Ipt_levels","Ipt", double.class, "Days Diff", $rrDaysDiff, true));
+													
+									if($excelIptAmount  == 0.0 )
+										{ 
+											logger.info ("Unable to extract IPT value. Default IPT 9.5% used.");
+											$excelIptAmount  = 95.0;	
+										}
+								}
+							catch (NullPointerException e)
+								{
+									logger.info ("NullPointerException Unable to extract IPT value. Default 9.5% used.");
+									$excelIptAmount  = 95.0;
+								}
+										
+							//Set IPT for use in calculcations using excel value
+							$lastYrsIptPerc = 100.00 + ($excelIptAmount / 10);
+							
+							int $lastYearsTotalPremiumExIpt = 0;
+							Number DdiscCommAmount = 0.0;
+							DdiscCommAmount = ((double)($polEx.getLastAnnualPremium() / $lastYrsIptPerc) * 100);
+							$lastYearsTotalPremiumExIpt = DdiscCommAmount.intValue();
+							int $lastYearsCommAmount = ($lastYearsTotalPremiumExIpt *  $polEx.getPolicyCommissionRate()) / 10000;
+							
+							//Recalculate lastYrsTotal
+							$lastYrsTotal = $polEx.getLastAnnualPremium() + $lastYearsCommAmount + $polEx.getBrokerFee(); //Ex commission and IPT
+						}
+					
+					LocalDate $incepDate = new LocalDate($iDate);
+					LocalDate $commLoadEndDate = new LocalDate("2018-08-05");
+					
+					if ($incepDate.isBefore($commLoadEndDate) && $aff.equals("GOLD"))
+						{	$lastYrsTotal = $lastYrsTotal + 2500;	}
+					else if ($incepDate.isBefore($commLoadEndDate) && $aff.equals("GLD2"))
+						{	$lastYrsTotal = $lastYrsTotal + 1300;	}
+					else if ($incepDate.isBefore($commLoadEndDate) && $aff.equals("DIAM"))
+						{	$lastYrsTotal = $lastYrsTotal + 3500;	}
+					
+					int $collaredTotal = (($lastYrsTotal * $excelTenureCollarPercentageAsInteger) / 100);
+					int $commissionAmendment = 0;
+					
+					//Establish IPT rate based on inception date
+					DateTime $startDate = new DateTime($iDate);
+					
+					double $nbIptPerc = 120.00, $nbExcelIptAmount = 0.0;
+					DateTime $nbEffDate = new DateTime(2016,10,1,0,0,0,0);
+					int $nbDaysDiff = (Days.daysBetween((ReadableInstant)$nbEffDate,(ReadableInstant)$iDate).getDays());
+						
+					try
+						{
+							$nbExcelIptAmount = (EUROPA_FORD_IPT.getValue("1.1_RTP_NB_Ipt_levels","Ipt", double.class, "Days Diff", $nbDaysDiff, true));
+											
+							if($nbExcelIptAmount  == 0.0 )
+								{ 
+									logger.info ("Unable to extract IPT value. Default IPT 12% used.");
+									$nbExcelIptAmount  = 120.0;	
+								}
+						}
+					catch (NullPointerException e)
+						{
+							logger.info ("NullPointerException Unable to extract IPT value. Default 12% used.");
+							$nbExcelIptAmount  = 120.0;
+						}
+					
+					//Set IPT for use in calculcations using excel value
+					$nbIptPerc = 100.00 + ($nbExcelIptAmount / 10);
+					
+					//Calculate this years total premium, uw plus commission plus ipt
+					Number DthisYrsTotalPremium = 0.0;
+					int $thisYrsTotalPremium = 0;
+					DthisYrsTotalPremium =  ($result.calcPremium() * ((double)$nbIptPerc)) / 100;
+					$thisYrsTotalPremium = DthisYrsTotalPremium.intValue() + $result.getFee();
+					
+					//Compare last yrs total with this yrs total
+					if ($thisYrsTotalPremium < $collaredTotal)
+						{	
+							$commissionAmendment = $collaredTotal - $thisYrsTotalPremium;
+							
+							int $currentUwPremium = $result.getAlgPremium() - $result.getInsurerDiscount().getValue() + $result.getInsurerLoad().getValue();
+							int $additionalAmount = ($currentUwPremium * 5) / 1000;
+							int $revisedCommission = ($result.getBrokerAdjustment() + $commissionAmendment) + $additionalAmount;
+							
+							//if revisedCommission is greater than 100% of current uw premium set to current uw premium
+							if ($revisedCommission > $currentUwPremium)
+								{ $revisedCommission = $currentUwPremium;	}
+							
+							$result.setBrokerAdjustment($revisedCommission);
+							$result.setRulesetChanged(true);
+							logger.info ("Renewal Rebroke Collar - Comm adjusted to #" + $result.getBrokerAdjustment());
+						}
+				}
+		}
+end
+
+//TB05062018 REDMINE 2765 DUQ based pricing.
+rule "duq based pricing"
+salience 2500
+activation-group "duq based pricing"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	Policy (rtpType == RTPType.N)
+	BaseRisk( affinity != "RIDE" && affinity != "SPEC" && affinity != "RTAR" && affinity !="CLAS", $aff : affinity)
+	$duqs  : ArrayList()from collect (Duq())
+then
+	int $journeyMilesDuq = 0, $journeyTimeDuq = 0;
+	
+	//Extract values for the miles and time duqs
+	for(Duq $field : (ArrayList<Duq>)$duqs)
+		{	
+			if ($field.getNumber() == 274)
+				{	
+					try
+						{	$journeyTimeDuq = Integer.parseInt($field.getValue());	}
+					catch (NumberFormatException nfe)
+						{	
+							logger.info ("Journey Time value entered is not a number");	
+							$journeyTimeDuq = 0;
+						} 
+				}
+				
+			if ($field.getNumber() == 275)
+				{	
+					try
+						{	$journeyMilesDuq = Integer.parseInt($field.getValue());	}
+					catch (NumberFormatException nfe)
+						{	
+							logger.info ("Journey Miles value entered is not a number");	
+							$journeyMilesDuq = 0;
+						}
+				}
+		}
+		
+	if ( $journeyTimeDuq > 0 || $journeyMilesDuq > 0 )
+		{ 
+			double $excelCommDiff = 0.0;
+		
+			//Attempt to extract the commission differential from the excel spreadsheet
+			try
+				{
+					$excelCommDiff = (EUROPA_COMM_MC.getValue("1.1_RTP_miles_time_duq","Commission DIfferential", double.class, "Affinity", $aff.trim().toUpperCase(), true));
+					
+					if ( $excelCommDiff  == 0.0 )
+						{ 	logger.info ("Zero Comm Differential Extracted. No commission change.");	}
+				}
+			catch (Exception e)
+				{
+					logger.info ("Exception Error Extracting Commission Differential");
+					$excelCommDiff  = 0.00;
+				}
+						
+			//Turn extracted values in to useable values
+			Number DexcelCommDiff = 0.0;
+			DexcelCommDiff = ((double)$excelCommDiff);
+			int $excelCommDiffAsInteger = DexcelCommDiff.intValue();
+		
+			if ( $excelCommDiffAsInteger != 0 )
+				{
+					int $revisedCommission = $result.getBrokerAdjustment() + $excelCommDiffAsInteger;
+					
+					if ( $revisedCommission == 0 )
+						{ $revisedCommission = 10;	}
+					
+					if ( $revisedCommission != 0)
+						{
+							$result.setBrokerAdjustment($revisedCommission);
+							$result.setRulesetChanged(true);
+							logger.info ("Comm Differential for miles or time. Comm adjusted to #" + $result.getBrokerAdjustment());
+						}
+				}		
+		}
+end
+
+//TB17072018 REDMINE 2711 Marketing Subagent Setup.
+rule "apply marketing commission adjustments"
+salience 2400
+activation-group "apply marketing commission adjustments"
+no-loop true
+when
+	$result : Result(eval(schemes.contains(schemeCode)))
+	Policy (rtpType == RTPType.N)
+	BaseRisk(affinity != "RIDE" && affinity != "SPEC" && affinity != "CLAS", $subAgent : subAgent)
+then
+	boolean $subAgentCodeLocated = true;
+	double $excelDifferential = 0.0;	
+	int $differentialAdjustment = 0, $revisedCommission = 0;
+
+	//check if sub agent is listed in worksheet
+	try
+		{
+			Object w = EUROPA_COMM_MC.getValue( "1.1_RTP_agg_marketing", "Referrer Code", String.class, "Referrer Code", $subAgent.trim().toUpperCase());
+			
+			if (w.toString().equals("0.0"))	
+				{
+					logger.info ("object w is 0.0. No Sub Agent differential found");
+					$subAgentCodeLocated = false;
+				}
+		}
+	catch (NullPointerException e)
+		{
+			logger.info ("No Sub Agent found. No differential found");
+			$subAgentCodeLocated = false;
+		}
+
+	//Proceed only if sub agent is located in the spreadsheet
+	if ($subAgentCodeLocated)
+		{
+			$excelDifferential = EUROPA_COMM_MC.getValue( "1.1_RTP_agg_marketing","Differential", double.class, "Referrer Code", $subAgent.trim().toUpperCase(), true);
+			
+			//Set differential extracted from spreadsheet to integer
+			Number DexcelDifferentialAmount = 0.0;
+			DexcelDifferentialAmount = ((double)$excelDifferential);
+			int $excelDifferentialValue = DexcelDifferentialAmount.intValue();
+			
+			$differentialAdjustment += $excelDifferentialValue;
+			$revisedCommission =  $result.getBrokerAdjustment() + $differentialAdjustment;
+			
+			//If revisedComm is zero, set it to 10p as net rated commssions cannot be zero
+			if ($revisedCommission == 0)
+				{ $revisedCommission = 10;	}
+			
+			if ($revisedCommission != 0)
+				{
+					$result.setBrokerAdjustment($revisedCommission);
+					$result.setRulesetChanged(true);
+					logger.info ("Sub Agent " + $subAgent.trim().toUpperCase() + ". Commission amended to #" + $result.getBrokerAdjustment());		
+				}
+		}
+end

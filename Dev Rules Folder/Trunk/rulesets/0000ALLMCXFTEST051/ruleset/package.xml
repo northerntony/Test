@@ -1,0 +1,13 @@
+<package>
+	<active-rules>0000ALLMCXFTEST051</active-rules>
+	<ruleset name="0000ALLMCXFTEST051">
+		<globals>globals.xml</globals>
+		<rules>rules.drl</rules>
+		<excelfiles>
+			<excelfile>
+				<excelfilename>EUROPA_COMM_MC</excelfilename>
+				<path>EUROPA_COMM_MC.xls</path>
+			</excelfile>			
+		</excelfiles>
+	</ruleset>
+</package>

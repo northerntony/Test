@@ -1,0 +1,338 @@
+<globals>
+<!-- 	 
+Creation Date: 08th September 2008
+Author: 		Tony Bailey
+Requirements:	AVIVA Bike Commission defaulted to £56 in back office. 
+ 				Set commission to various levels for various covers and groups.
+		 
+History
+Date		Version	Author	Description of Change
+19/01/11	023		TB		JOB 5172 Increase GOLD commissions.		
+11/03/11	024		TB		JOB 5609 Setting DIAMOND renewals commission.	
+11/04/11	025		TB		JOB 5856 GOLD & DIAMOND renewals commissions.	
+18/04/11	026		TB		JOB 5900 Correction to include SILV affinity.
+09/05/11	027		TB		JOB 6023 Aviva RTP discounts.
+10/05/11	028		TB		JOB 6042 New rule for Aviva XF scheme. Also, remove 5% loading rule for ages 30 to 59 year olds.				
+11/05/11	029		TB		JOB 6051 Correct the commission change for the bike insurer to not apply for GOLD & DIAM affinities.
+13/05/11	030		TB		JOB 6081 Increase Aviva bike group discounts.
+16/05/11	031		TB		JOB 6068 Reduce Gold Commissions by £10.00.
+19/05/11	032		TB		JOB 6116 Further RTP reductions for Aviva XF.
+24/05/11	033		TB		JOB 6151 Reduce XF minimum premiums.
+05/08/11	034		TB		JOB 6743 Aviva XF group 16 and 17 motorcycle to decline.
+11/08/11	035		TB		JOB 6789 Increase commission for Silver Gold and Diamond in the U branch.
+15/08/11	036		TB		JOB 6346 Move commission for Silver Gold Diamond to add-on and amend commissions.
+24/08/11	037		TB		JOB 6930 Allow £25 discount for source CC11.
+05/09/11	038		TB		JOB 6877 Price out Channel Isles postcodes.
+06/09/11	039		TB		JOB 6862 Remove rule put in for Job 6743.
+15/09/11	040		TB		JOB 7109 Update DIAM GOLD & SILV RPT commission changes to inc excel spreadsheet.
+02/11/11	041		TB		JOB 6413 Discount for BLD staff (L & U branches).
+14/11/11	042		TB		JOB 7662 Changes to Aviva RTP Discounts and minimum premiums.
+14/02/12	043		TB		JOB 8457 Aviva XF scheme reduced RTP test.
+22/02/12	044		TB		JOB 8547 Remove Aviva XF scheme reduced RTP test rules.
+28/02/12	045		TB		JOB 8578 Reinstate Aviva XF scheme reduced RTP test.
+14/03/12	046		TB		JOB 8768 Aviva RTP discounts.
+26/04/12	047		TB		JOB 9222 Aviva RTP - Auth Code.
+11/06/12	048		TB		JOB 9309 Pricing changes for Bike NTU & lapsed email campaigns. Also, tidied up code.
+03/08/12	049		TB		JOB 10294 Correct RTP code to decline risks on Motorcycle and decline for dual postcodes. 
+14/08/12	050		TB		JOB 10395 Correct RTP code to decline for dual postcodes.
+24/10/12	051		TB		MOVE COMMISSION IN TO FEES.
+-->
+	<global name = "schemes">
+		<tree-set>
+			<no-comparator />
+			<string>XF</string>
+		</tree-set>
+	</global>
+
+	<!-- TB18042011 JOB 5900 Correction to include SILV affinity. -->
+	<global name = "affinityCode">
+		<tree-set>
+			<no-comparator />
+			<string>BLAC</string>
+			<string>DATA</string>
+			<string>ENDS</string>
+			<string>FOWL</string>
+			<string>KAWA</string>
+			<string>MCD</string>
+			<string>PEUG</string>
+			<string>SACH</string>
+			<string>GOLD</string>
+			<string>SILV</string>
+		</tree-set>
+	</global>
+
+	<global name="ridersureAffinityCode">
+		<tree-set>
+			<no-comparator />
+			<string>RIDE</string>
+			<string>SPEC</string>
+		</tree-set>
+	</global>
+
+	<global name="deluxeAffinity">
+		<tree-set>
+			<no-comparator />
+			<string>GOLD</string>
+		</tree-set>
+	</global>
+
+	<!-- TB15092011 JOB 7109 Update DIAM GOLD & SILV RPT commission changes to inc excel spreadsheet. -->
+	<global name="spreadsheetAffinity">
+		<tree-set>
+			<no-comparator />
+			<string>DIAM</string>
+			<string>GOLD</string>
+			<string>SILV</string>
+		</tree-set>
+	</global>
+
+	<global name="nuPremCompCommissions">
+		<map>
+			<entry> <int>1</int> <int>3600</int> </entry>
+			<entry> <int>2</int> <int>3600</int> </entry>
+			<entry> <int>3</int> <int>3600</int> </entry>
+			<entry> <int>4</int> <int>3600</int> </entry>
+			<entry> <int>5</int> <int>3600</int> </entry>
+			<entry> <int>6</int> <int>3600</int> </entry>
+			<entry> <int>7</int> <int>4500</int> </entry>
+			<entry> <int>8</int> <int>4500</int> </entry>
+			<entry> <int>9</int> <int>5000</int> </entry>
+			<entry> <int>10</int> <int>5000</int> </entry>
+			<entry> <int>11</int> <int>5500</int> </entry>
+			<entry> <int>12</int> <int>6000</int> </entry>
+			<entry> <int>13</int> <int>6000</int> </entry>
+			<entry> <int>14</int> <int>6000</int> </entry>
+			<entry> <int>15</int> <int>6000</int> </entry>
+			<entry> <int>16</int> <int>6000</int> </entry>
+			<entry> <int>17</int> <int>6000</int> </entry>
+			<entry> <int>18</int> <int>6000</int> </entry>
+			<entry> <int>19</int> <int>6000</int> </entry>
+			<entry> <int>20</int> <int>6000</int> </entry>
+			<entry> <int>21</int> <int>6000</int> </entry>
+			<entry> <int>22</int> <int>6000</int> </entry>
+			<entry> <int>23</int> <int>6000</int> </entry>
+			<entry> <int>24</int> <int>6000</int> </entry>
+			<entry> <int>25</int> <int>6000</int> </entry>
+			<entry> <int>26</int> <int>6000</int> </entry>
+			<entry> <int>27</int> <int>6000</int> </entry>
+			<entry> <int>28</int> <int>6000</int> </entry>
+			<entry> <int>29</int> <int>6000</int> </entry>
+			<entry> <int>30</int> <int>6000</int> </entry>
+			<entry> <int>31</int> <int>6000</int> </entry>
+			<entry> <int>32</int> <int>6000</int> </entry>
+			<entry> <int>33</int> <int>6000</int> </entry>
+			<entry> <int>34</int> <int>6000</int> </entry>
+			<entry> <int>35</int> <int>6000</int> </entry>
+			<entry> <int>36</int> <int>6000</int> </entry>
+			<entry> <int>37</int> <int>6000</int> </entry>
+			<entry> <int>38</int> <int>6000</int> </entry>
+			<entry> <int>39</int> <int>6000</int> </entry>
+			<entry> <int>40</int> <int>6000</int> </entry>
+			<entry> <int>41</int> <int>6000</int> </entry>
+			<entry> <int>42</int> <int>6000</int> </entry>
+			<entry> <int>43</int> <int>6000</int> </entry>
+			<entry> <int>44</int> <int>6000</int> </entry>
+			<entry> <int>45</int> <int>6000</int> </entry>
+			<entry> <int>46</int> <int>6000</int> </entry>
+			<entry> <int>47</int> <int>6000</int> </entry>
+			<entry> <int>48</int> <int>6000</int> </entry>
+			<entry> <int>50</int> <int>6000</int> </entry>
+			<entry> <int>90</int> <int>6000</int> </entry>
+			<entry> <int>98</int> <int>6000</int> </entry>
+			<entry> <int>99</int> <int>6000</int> </entry>
+		</map>
+	</global>
+	
+	<global name="nuPremTPFTCommissions">
+		<map>
+			<entry> <int>1</int> <int>3600</int> </entry>
+			<entry> <int>2</int> <int>3600</int> </entry>
+			<entry> <int>3</int> <int>3600</int> </entry>
+			<entry> <int>4</int> <int>3600</int> </entry>
+			<entry> <int>5</int> <int>3600</int> </entry>
+			<entry> <int>6</int> <int>3600</int> </entry>
+			<entry> <int>7</int> <int>4700</int> </entry>
+			<entry> <int>8</int> <int>4700</int> </entry>
+			<entry> <int>9</int> <int>4700</int> </entry>
+			<entry> <int>10</int> <int>4700</int> </entry>
+			<entry> <int>11</int> <int>4700</int> </entry>
+			<entry> <int>12</int> <int>5650</int> </entry>
+			<entry> <int>13</int> <int>5650</int> </entry>
+			<entry> <int>14</int> <int>5650</int> </entry>
+			<entry> <int>15</int> <int>5650</int> </entry>
+			<entry> <int>16</int> <int>5650</int> </entry>
+			<entry> <int>17</int> <int>5650</int> </entry>
+			<entry> <int>18</int> <int>5650</int> </entry>
+			<entry> <int>19</int> <int>5650</int> </entry>
+			<entry> <int>20</int> <int>5650</int> </entry>
+			<entry> <int>21</int> <int>5650</int> </entry>
+			<entry> <int>22</int> <int>5650</int> </entry>
+			<entry> <int>23</int> <int>5650</int> </entry>
+			<entry> <int>24</int> <int>5650</int> </entry>
+			<entry> <int>25</int> <int>5650</int> </entry>
+			<entry> <int>26</int> <int>5650</int> </entry>
+			<entry> <int>27</int> <int>5650</int> </entry>
+			<entry> <int>28</int> <int>5650</int> </entry>
+			<entry> <int>29</int> <int>5650</int> </entry>
+			<entry> <int>30</int> <int>5650</int> </entry>
+			<entry> <int>31</int> <int>5650</int> </entry>
+			<entry> <int>32</int> <int>5650</int> </entry>
+			<entry> <int>33</int> <int>5650</int> </entry>
+			<entry> <int>34</int> <int>5650</int> </entry>
+			<entry> <int>35</int> <int>5650</int> </entry>
+			<entry> <int>36</int> <int>5650</int> </entry>
+			<entry> <int>37</int> <int>5650</int> </entry>
+			<entry> <int>38</int> <int>5650</int> </entry>
+			<entry> <int>39</int> <int>5650</int> </entry>
+			<entry> <int>40</int> <int>5650</int> </entry>
+			<entry> <int>41</int> <int>5650</int> </entry>
+			<entry> <int>42</int> <int>5650</int> </entry>
+			<entry> <int>43</int> <int>5650</int> </entry>
+			<entry> <int>44</int> <int>5650</int> </entry>
+			<entry> <int>45</int> <int>5650</int> </entry>
+			<entry> <int>46</int> <int>5650</int> </entry>
+			<entry> <int>47</int> <int>5650</int> </entry>
+			<entry> <int>48</int> <int>5650</int> </entry>
+			<entry> <int>50</int> <int>5650</int> </entry>
+			<entry> <int>90</int> <int>5650</int> </entry>
+			<entry> <int>98</int> <int>5650</int> </entry>
+			<entry> <int>99</int> <int>5650</int> </entry>
+		</map>
+	</global>
+	
+	<global name="nuPremTPOCommissions">
+		<map>
+			<entry> <int>1</int> <int>3150</int> </entry>
+			<entry> <int>2</int> <int>3150</int> </entry>
+			<entry> <int>3</int> <int>3150</int> </entry>
+			<entry> <int>4</int> <int>3650</int> </entry>
+			<entry> <int>5</int> <int>3650</int> </entry>
+			<entry> <int>6</int> <int>3650</int> </entry>
+			<entry> <int>7</int> <int>5650</int> </entry>
+			<entry> <int>8</int> <int>5650</int> </entry>
+			<entry> <int>9</int> <int>5650</int> </entry>
+			<entry> <int>10</int> <int>5650</int> </entry>
+			<entry> <int>11</int> <int>5650</int> </entry>
+			<entry> <int>12</int> <int>5650</int> </entry>
+			<entry> <int>13</int> <int>5650</int> </entry>
+			<entry> <int>14</int> <int>5650</int> </entry>
+			<entry> <int>15</int> <int>5650</int> </entry>
+			<entry> <int>16</int> <int>5650</int> </entry>
+			<entry> <int>17</int> <int>5650</int> </entry>
+			<entry> <int>18</int> <int>5650</int> </entry>
+			<entry> <int>19</int> <int>5650</int> </entry>
+			<entry> <int>20</int> <int>5650</int> </entry>
+			<entry> <int>21</int> <int>5650</int> </entry>
+			<entry> <int>22</int> <int>5650</int> </entry>
+			<entry> <int>23</int> <int>5650</int> </entry>
+			<entry> <int>24</int> <int>5650</int> </entry>
+			<entry> <int>25</int> <int>5650</int> </entry>
+			<entry> <int>26</int> <int>5650</int> </entry>
+			<entry> <int>27</int> <int>5650</int> </entry>
+			<entry> <int>28</int> <int>5650</int> </entry>
+			<entry> <int>29</int> <int>5650</int> </entry>
+			<entry> <int>30</int> <int>5650</int> </entry>
+			<entry> <int>31</int> <int>5650</int> </entry>
+			<entry> <int>32</int> <int>5650</int> </entry>
+			<entry> <int>33</int> <int>5650</int> </entry>
+			<entry> <int>34</int> <int>5650</int> </entry>
+			<entry> <int>35</int> <int>5650</int> </entry>
+			<entry> <int>36</int> <int>5650</int> </entry>
+			<entry> <int>37</int> <int>5650</int> </entry>
+			<entry> <int>38</int> <int>5650</int> </entry>
+			<entry> <int>39</int> <int>5650</int> </entry>
+			<entry> <int>40</int> <int>5650</int> </entry>
+			<entry> <int>41</int> <int>5650</int> </entry>
+			<entry> <int>42</int> <int>5650</int> </entry>
+			<entry> <int>43</int> <int>5650</int> </entry>
+			<entry> <int>44</int> <int>5650</int> </entry>
+			<entry> <int>45</int> <int>5650</int> </entry>
+			<entry> <int>46</int> <int>5650</int> </entry>
+			<entry> <int>47</int> <int>5650</int> </entry>
+			<entry> <int>48</int> <int>5650</int> </entry>
+			<entry> <int>50</int> <int>5650</int> </entry>
+			<entry> <int>90</int> <int>5650</int> </entry>
+			<entry> <int>98</int> <int>5650</int> </entry>
+			<entry> <int>99</int> <int>5650</int> </entry>
+		</map>
+	</global>
+
+	<!-- TB09052011 Job 6023 change minimums to match -->
+	<!-- TB24052011 JOB 6151 Reduce XF minimum premiums. -->
+	<!-- TB14112011 JOB 7662 Changes to Aviva RTP Discounts and minimum premiums. Was comp 7000 and non comp 6000 -->
+		<global name="minEnhancedDiscPremium">
+		<map>
+			<entry>
+				<string>C</string>
+				<int>7500</int><!-- Excluding IPT -->
+			</entry>
+			<entry>
+				<string>F</string>
+				<int>7000</int><!-- Excluding IPT -->
+			</entry>
+			<entry>
+				<string>T</string>
+				<int>7000</int><!-- Excluding IPT -->
+			</entry>
+		</map>
+	</global>
+	
+	<!-- TB09052011 Job 6023 -->
+	<!-- TB13052011 JOB 6081 Increase Aviva bike group discounts. -->
+	<!-- TB19052011 JOB 6116 Further RTP reductions for Aviva XF. -->
+	<!-- TB14112011 JOB 7662 Changes to Aviva RTP Discounts and minimum premiums. -->
+	<!-- TB14032012 JOB 8768 Aviva RTP discounts. -->
+	<global name="compGroupDiscount">
+		<map>
+			<entry> <int>8</int>   <float>1.000</float> </entry>
+			<entry> <int>9</int>   <float>1.000</float> </entry>
+			<entry> <int>10</int>  <float>0.900</float> </entry>
+			<entry> <int>11</int>  <float>0.900</float> </entry>
+			<entry> <int>12</int>  <float>0.950</float> </entry>
+			<entry> <int>13</int>  <float>0.850</float> </entry>
+			<entry> <int>14</int>  <float>0.850</float> </entry>
+			<entry> <int>15</int>  <float>1.000</float> </entry>
+			<entry> <int>16</int>  <float>0.850</float> </entry>
+			<entry> <int>17</int>  <float>1.000</float> </entry>
+			<entry> <int>18</int>  <float>1.000</float> </entry>					
+		</map>
+	</global>
+	
+	<!-- TB09052011 Job 6023 -->
+	<!-- TB13052011 JOB 6081 Increase Aviva bike group discounts. -->
+	<!-- TB14032012 JOB 8768 Aviva RTP discounts. -->
+	<global name="tpftGroupDiscount">
+		<map>
+			<entry> <int>8</int>   <float>1.000</float> </entry>
+			<entry> <int>9</int>   <float>1.000</float> </entry>
+			<entry> <int>10</int>  <float>1.000</float> </entry>
+			<entry> <int>11</int>  <float>0.925</float> </entry>
+			<entry> <int>12</int>  <float>0.925</float> </entry>
+			<entry> <int>13</int>  <float>0.925</float> </entry>
+			<entry> <int>14</int>  <float>0.925</float> </entry>
+			<entry> <int>15</int>  <float>0.925</float> </entry>
+			<entry> <int>16</int>  <float>0.925</float> </entry>
+			<entry> <int>17</int>  <float>0.925</float> </entry>
+			<entry> <int>18</int>  <float>1.000</float> </entry>					
+		</map>
+	</global>
+	
+	<!-- TB02112011	JOB 6413 Discount for BLD staff (L & U branches). -->	
+	<global name = "bldAffinityCode">
+		<tree-set>
+			<no-comparator />
+			<string>BLAC</string>
+			<string>DATA</string>
+			<string>ENDS</string>
+			<string>FOWL</string>
+			<string>KAWA</string>
+			<string>MCD</string>
+			<string>PEUG</string>
+			<string>SACH</string>
+		</tree-set>
+	</global>
+	
+	<global name="DEBUG">
+		<boolean>TRUE</boolean>
+	</global>
+</globals>

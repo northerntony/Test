@@ -1,0 +1,17 @@
+<package>
+	<active-rules>0000ALLMCUN084</active-rules>
+	<ruleset name="0000ALLMCUN084">
+		<globals>globals.xml</globals>
+		<rules>rules.drl</rules>
+		<excelfiles>
+			<excelfile>
+				<excelfilename>EUROPA_COMM_MC</excelfilename>
+				<path>EUROPA_COMM_MC.xls</path>
+			</excelfile>
+			<excelfile>
+				<excelfilename>EUROPA_FORD_IPT</excelfilename>
+				<path>EUROPA_FORD_IPT.xls</path>
+			</excelfile>
+		</excelfiles>
+	</ruleset>
+</package>
